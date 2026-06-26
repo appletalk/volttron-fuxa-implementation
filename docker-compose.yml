@@ -1,0 +1,42 @@
+# Dev environment for the VOLTTRON <-> FUXA integration.
+#
+#   modbus-sim   fake field device (live, writable registers)  -- DONE
+#   volttron     platform-driver + Modbus driver + historian
+#                + fuxa-bridge agent (VIP bus <-> WebSocket/REST) -- TODO
+#   fuxa         FUXA UI + Volttron device connector             -- TODO
+#
+# Bring up incrementally, e.g.:  docker compose up modbus-sim
+services:
+  modbus-sim:
+    build: ./modbus-sim
+    container_name: vf-modbus-sim
+    ports:
+      - "5020:5020"     # exposed on host for debugging; VOLTTRON reaches it in-network
+    restart: unless-stopped
+
+  volttron:
+    build: ./volttron
+    container_name: vf-volttron
+    depends_on: [modbus-sim]
+    ports:
+      - "8080:8080"   # fuxa-bridge WebSocket + REST (Phase 4)
+    volumes:
+      - "volttron-data:/home/volttron/.volttron/data"   # persist historian db
+    restart: unless-stopped
+
+  fuxa:
+    image: frangoteam/fuxa:latest
+    container_name: vf-fuxa
+    # Swapped to a local build (build: ./FUXA) in Phase 5 once the
+    # Volttron connector is added to the FUXA source.
+    volumes:
+      - "./fuxa-data/appdata:/usr/src/app/FUXA/server/_appdata"
+      - "./fuxa-data/db:/usr/src/app/FUXA/server/_db"
+      - "./fuxa-data/logs:/usr/src/app/FUXA/server/_logs"
+      - "./fuxa-data/images:/usr/src/app/FUXA/server/_images"
+    ports:
+      - "1881:1881"
+    restart: unless-stopped
+
+volumes:
+  volttron-data:

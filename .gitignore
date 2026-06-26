@@ -1,0 +1,10 @@
+# Local dev volumes / runtime state
+fuxa-data/
+volttron/data/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/

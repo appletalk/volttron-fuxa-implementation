@@ -1,0 +1,14 @@
+# Coherent VOLTTRON v10 modular set (all upstream releases are RC/alpha;
+# there is no "final" release line). Versions chosen so pip resolves cleanly:
+#   platform-driver 0.2.1rc2  -> base-driver >=0.2.1rc2,<1.0.0
+#   modbus-driver   0.2.1rc0  -> base-driver >=0.2.1rc0,<0.3.0   (overlaps above)
+#   base-driver     0.2.1rc2  -> volttron   >=10.0.3,<11.0.0
+# The Modbus driver pins pymodbus<3 (it is the Modbus *client*); the simulator
+# uses pymodbus 3.x as the *server* -- wire-compatible, separate processes.
+volttron==10.0.5rc4
+volttron-platform-driver==0.2.1rc2
+volttron-lib-base-driver==0.2.1rc2
+volttron-lib-modbus-driver==0.2.1rc0
+volttron-sqlite-historian==0.2.1rc1
+# fuxa-bridge web server (gevent-based, to coexist with VOLTTRON's gevent hub)
+gevent-websocket==0.10.1
