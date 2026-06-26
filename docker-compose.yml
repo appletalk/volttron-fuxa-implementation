@@ -25,10 +25,12 @@ services:
     restart: unless-stopped
 
   fuxa:
-    image: frangoteam/fuxa:latest
+    # Local build of the FUXA fork (appletalk/FUXA, branch volttron-connector)
+    # which adds the `Volttron` device connector. The checkout lives at ../FUXA.
+    build:
+      context: ../FUXA
     container_name: vf-fuxa
-    # Swapped to a local build (build: ./FUXA) in Phase 5 once the
-    # Volttron connector is added to the FUXA source.
+    depends_on: [volttron]
     volumes:
       - "./fuxa-data/appdata:/usr/src/app/FUXA/server/_appdata"
       - "./fuxa-data/db:/usr/src/app/FUXA/server/_db"

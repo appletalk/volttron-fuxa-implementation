@@ -8,3 +8,6 @@ __pycache__/
 *.pyc
 venv/
 .venv/
+
+# Playwright MCP scratch snapshots
+.playwright-mcp/

@@ -91,7 +91,13 @@ Then open FUXA at <http://localhost:1881>.
 4. ✅ `fuxa-bridge` agent — dynamic VOLTTRON agent + gevent HTTP/WebSocket on
    :8080. Verified: WS snapshot + live update pushes (reads), and
    `PUT /api/points` → `set_point` RPC → Modbus write reaching the simulator.
-5. ⏳ FUXA `volttron` device connector + UI, validate read/write round-trip
+5. ✅ FUXA `volttron` device connector + UI (in the [appletalk/FUXA fork](https://github.com/appletalk/FUXA/tree/volttron-connector)).
+   Verified end-to-end in the FUXA UI: `Volttron` device type selectable, bridge-URL
+   address field, point browser lists all 7 VOLTTRON points, imported as tags, live
+   reads stream into the editor, and a write (`valve_open=77`) round-trips to the device.
+
+**The integration is complete and verified end-to-end.** The `fuxa` compose
+service builds the fork locally (`build: ../FUXA`).
 
 ### fuxa-bridge API (port 8080)
 

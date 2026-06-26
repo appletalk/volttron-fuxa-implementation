@@ -20,15 +20,18 @@ WebSocket (`/ws`), writes via `PUT /api/points` (→ `platform.driver` `set_poin
 
 | File | Change |
 |---|---|
-| `server/runtime/devices/volttron/index.js` | new connector (the integration logic) |
-| `server/runtime/devices/device.js` | register the connector: `require`, `create()` dispatch, `DeviceEnum.Volttron`, `loadPlugin` |
+| `server/runtime/devices/volttron/index.js` | new connector (reads via bridge WS, writes via REST, `browse()` lists points) |
+| `server/runtime/devices/device.js` | register the connector: `require`, `create()` dispatch, `DeviceEnum.Volttron`, `loadPlugin`, browse dispatch |
 | `client/src/app/_models/device.ts` | add `Volttron` to the client `DeviceType` enum |
+| `client/.../device-map.component.ts` | `Volttron` in the device-type selector |
+| `client/.../device-property.component.html` | `Volttron` property form with bridge-URL address field |
+| `client/.../tag-property.service.ts` | `scanTagsVolttron()` point browser (reuses the scan dialog) |
+| `client/.../device-list.component.ts` | route "add tag" to the point browser |
 
-## Status
+## Status — complete and verified
 
-Server-side connector is complete and syntax-checked. Remaining: wire the
-`Volttron` type into the Angular client UI (type selector + property form with
-the `address` field + manual tag-address entry) across `device-list`,
-`device-property`, `device-map`, `device-tag-selection`, then a client rebuild.
-After that, point the `fuxa` service in `../docker-compose.yml` at a local build
-of the fork instead of `frangoteam/fuxa:latest`.
+Verified end-to-end in the FUXA UI: the `Volttron` device type is selectable,
+the point browser lists all 7 VOLTTRON points (correct inferred types), tags
+import, live reads stream into the editor, and a write (`valve_open=77`)
+round-trips through the connector to the device. The `fuxa` service in
+`../docker-compose.yml` builds the fork locally (`build: ../FUXA`).
