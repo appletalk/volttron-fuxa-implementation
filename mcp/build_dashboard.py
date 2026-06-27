@@ -26,6 +26,7 @@ DEVICE_ID = "heat_station"
 DEVICE_NAME = "HeatStation"
 DEVPATH = "campus/building/heat_station"
 CHART_ID = "chart_substation"
+CHART2_ID = "chart_pressure"
 SEP = "^~^"
 
 # point -> (units, modbus-writable?) ; order groups inputs, controls, alarms
@@ -88,20 +89,24 @@ def value(x, y, p, units="", fs=16, color="#eaf6ff", anchor="middle"):
          "label": "Value"})
 
 
-def motor(cx, cy, p, r=20):
-    # proc-eng shape: current FUXA color-processes 'svg-ext-proceng' (fills all
-    # child nodes by range). Inner circle gets the status color; the triangle
-    # vane stays dark via an explicit override after.
+def motor(cx, cy, p, r=22):
+    # proc-eng shape (svg-ext-proceng): FUXA fills every child node with the
+    # range color -> the disc shows pump status (green/red/grey). A separate
+    # static white vane drawn ON TOP (outside the group) keeps the pump look.
     gid = uid("MTR")
-    add(f'<g type="svg-ext-proceng" id="{gid}" fill="#7f8c8d" font-size="14" '
+    add(f'<g type="svg-ext-proceng" id="{gid}" fill="#5b6b78" font-size="14" '
         f'font-family="sans-serif" text-anchor="middle" stroke="#0a1a24">'
-        f'<ellipse cx="{cx}" cy="{cy}" rx="{r}" ry="{r}" stroke="#0a1a24" id="{gid}_e"/></g>',
+        f'<ellipse cx="{cx}" cy="{cy}" rx="{r}" ry="{r}" stroke="#0a1a24" '
+        f'stroke-width="2" id="{gid}_e"/></g>',
         {"id": gid, "type": "svg-ext-proceng", "name": p,
          "property": _prop(p, {"ranges": [
-             {"type": "range", "min": "1", "max": "1", "color": "#2ecc71"},
+             {"type": "range", "min": "1", "max": "1", "color": "#27c06a"},
              {"type": "range", "min": "2", "max": "2", "color": "#e74c3c"},
              {"type": "range", "min": "0", "max": "0", "color": "#5b6b78"}]}),
          "label": "Motor"})
+    # static vane (impeller) on top, not recolored
+    add(f'<path d="M{cx-r+6},{cy}L{cx+r-7},{cy-r+8}L{cx+r-7},{cy+r-8}z" '
+        f'fill="#f4f8fc" stroke="none" opacity="0.92"/>')
 
 
 def semaphore(cx, cy, p, r=11):
@@ -118,12 +123,15 @@ def semaphore(cx, cy, p, r=11):
 
 
 def progress(x, y, w, h, p, mn, mx):
+    # child ids MUST start with A-/B-/H- (gauge-progress finds the background,
+    # fill and label rects by that prefix; otherwise processValue throws on null
+    # and breaks the whole signal pipeline).
     gid = uid("GXP")
     add(f'<g font-family="sans-serif" font-size="14" type="svg-ext-gauge_progress" '
         f'id="{gid}" stroke="null">'
-        f'<rect fill="#16303f" height="{h}" width="{w}" y="{y}" x="{x}" id="{gid}_a" stroke="null"/>'
-        f'<rect fill="#3aa0ff" height="{h}" width="{w}" y="{y}" x="{x}" id="{gid}_b" stroke="null"/>'
-        f'<foreignObject font-size="14" id="{gid}_h" width="{w}" height="{h}" y="{y}" x="{x}"/></g>',
+        f'<rect fill="#16303f" height="{h}" width="{w}" y="{y}" x="{x}" id="A-{gid}" stroke="null"/>'
+        f'<rect fill="#3aa0ff" height="{h}" width="{w}" y="{y}" x="{x}" id="B-{gid}" stroke="null"/>'
+        f'<foreignObject font-size="14" id="H-{gid}" width="{w}" height="{h}" y="{y}" x="{x}"/></g>',
         {"id": gid, "type": "svg-ext-gauge_progress", "name": p,
          "property": _prop(p, {"ranges": [{"type": "minmax", "min": mn, "max": mx,
                                            "style": [True, True], "color": "#3aa0ff"}]}),
@@ -146,16 +154,29 @@ def button(x, y, w, h, label, p, val, color="#2d6cdf"):
          "label": "HtmlButton"})
 
 
-def chart(x, y, w, h):
+def chart(x, y, w, h, chart_id):
+    # initElement finds the chart host DIV via the 'D-' prefix; the foreignObject
+    # uses 'H-'. Without these the ChartUplot component is never created.
     gid = uid("HXC")
-    add(f'<g id="{gid}" type="svg-ext-html_chart" fill="#0e1b26" font-size="14" '
+    add(f'<g id="{gid}" type="svg-ext-html_chart" fill="#ffffff" font-size="14" '
         f'font-family="sans-serif" text-anchor="right" stroke="#000000">'
-        f'<rect stroke-width="0" x="{x}" y="{y}" width="{w}" height="{h}" id="{gid}_r" fill="#0b1a24" stroke="null"/>'
-        f'<foreignObject x="{x}" y="{y}" height="{h}" width="{w}" id="{gid}_h">'
-        f'<DIV style="width:100%;height:100%;vector-effect:non-scaling-stroke;" id="{gid}_d"></DIV>'
+        f'<rect stroke-width="0" x="{x}" y="{y}" width="{w}" height="{h}" id="{gid}_r" fill="#f4f7fb" stroke="null"/>'
+        f'<foreignObject x="{x}" y="{y}" height="{h}" width="{w}" id="H-{gid}">'
+        f'<DIV style="width:100%;height:100%;vector-effect:non-scaling-stroke;'
+        f'background-color:#f4f7fb;border-radius:4px;" id="D-{gid}"></DIV>'
         f'</foreignObject></g>',
         {"id": gid, "type": "svg-ext-html_chart", "name": "Trend",
-         "property": {"id": CHART_ID, "type": "realtime1"}, "label": "HtmlChart"})
+         # legend.live=false -> static legend (series labels only); kills the
+         # uPlot idle-cursor "--" values and the epoch-0 (1969) time readout.
+         "property": {"id": chart_id, "type": "realtime1",
+                      "options": {"legend": {"live": False}}}, "label": "HtmlChart"})
+
+
+def kpi(x, y, w, label, p, units, color):
+    """Big-number KPI tile."""
+    box(x, y, w, 78, "#0e2030", "#21506e", 1.5, 8)
+    text(x + w / 2, y + 22, label, 11, "#8fb8d6", "middle", "bold")
+    value(x + w / 2, y + 56, p, units, 28, color, "middle")
 
 
 # --- static decoration (no binding) -----------------------------------------
@@ -222,6 +243,10 @@ pipe(1000, 330, 1075, 330, HOT)
 pipe(1075, 330, 1075, 300, HOT)
 pipe(1075, 560, 1000, 560, COLD)
 
+# ---- Central trend (the live story): temperatures + flow ----
+text(366, 392, "REAL-TIME TREND · Supply / Return Temp & Flow", 12, "#9fd0ff", "start", "bold")
+chart(360, 400, 620, 150, CHART_ID)
+
 # ---- Secondary readouts panel (left) ----
 box(60, 360, 250, 210)
 text(80, 388, "SECONDARY", 13, "#9fd0ff", "start", "bold")
@@ -246,9 +271,9 @@ text(560, 662, "MAKEUP PUMP", 11, "#9fd0ff", "middle")
 value(560, 730, "makeup_pump_hz", "Hz", 12, "#cfe9ff", "middle")
 pipe(480, 690, 540, 690, COLD)
 
-# ---- Trend (bottom left) ----
-text(70, 610, "REAL-TIME TREND  (supply / return / flow)", 12, "#9fd0ff", "start", "bold")
-chart(60, 618, 270, 150)
+# ---- Trend (bottom left): pressures & pump speed ----
+text(70, 610, "PRESSURE & PUMP SPEED", 12, "#9fd0ff", "start", "bold")
+chart(60, 618, 290, 150, CHART2_ID)
 
 # ---- Operator control panel (bottom) ----
 PX = 700
@@ -294,9 +319,12 @@ for i, (lab, p) in enumerate(alarms):
 def build_device():
     tags = {}
     for p in POINTS:
+        # DAQ off: charts plot pure realtime (browser-clock) points. With DAQ on,
+        # the realtime chart also pulls ~8h of historian data (stored UTC) and the
+        # mismatched timestamps make the x-axis look wrong.
         tags[TID(p)] = {"id": TID(p), "name": p, "type": "Real",
                         "address": f"{DEVPATH}/{p}",
-                        "daq": {"enabled": True, "interval": 60, "changed": False, "restored": False}}
+                        "daq": {"enabled": False, "interval": 60, "changed": False, "restored": False}}
     return {"id": DEVICE_ID, "name": DEVICE_NAME, "enabled": True, "type": "Volttron",
             "property": {"address": BRIDGE, "port": None, "slot": None, "rack": None,
                          "baudrate": 9600, "databits": 8, "stopbits": 1, "parity": "None",
@@ -305,17 +333,35 @@ def build_device():
 
 
 def main():
+    # uPlot's live legend shows an idle "--" value and an epoch-0 (1969) time row
+    # when the cursor isn't hovering, and FUXA doesn't pass legend options through.
+    # Hide the time row + value cells via CSS, leaving just the colored series
+    # labels. (Applies document-wide to the HTML legend inside the chart.)
+    style = ('<style>.u-legend .u-series:first-child{display:none !important;}'
+             '.u-legend .u-value{display:none !important;}'
+             '.u-legend{color:#1b2a36;font-size:11px;}</style>')
     svg = ('<svg width="1280" height="800" xmlns="http://www.w3.org/2000/svg" '
            'xmlns:svg="http://www.w3.org/2000/svg" xmlns:html="http://www.w3.org/1999/xhtml">'
-           + "".join(svg_parts) + "</svg>")
+           + style + "".join(svg_parts) + "</svg>")
     view = {"id": "v_heat_station", "name": "MainView", "type": "svg",
             "profile": {"width": 1280, "height": 800, "bkcolor": "#0a1622ff"},
             "items": items, "variables": {}, "svgcontent": svg,
             "property": {"events": []}}
-    chart_def = {"id": CHART_ID, "name": "Substation Trend", "type": "realtime1", "lines": [
-        {"id": TID("secondary_supply_temp"), "name": "Supply °C", "device": DEVICE_NAME, "color": "#ff6b6b"},
-        {"id": TID("secondary_return_temp"), "name": "Return °C", "device": DEVICE_NAME, "color": "#4dabf7"},
-        {"id": TID("secondary_flow"), "name": "Flow", "device": DEVICE_NAME, "color": "#51cf66"}]}
+    def line(point, label, color, yaxis=1):
+        return {"id": TID(point), "name": point, "label": label,
+                "device": DEVICE_NAME, "color": color, "yaxis": yaxis, "lineWidth": 2}
+    charts = [
+        # temps on axis 1, flow on axis 2 so temperatures use the full height
+        {"id": CHART_ID, "name": "Temperatures & Flow", "type": "realtime1", "lines": [
+            line("secondary_supply_temp", "Supply °C", "#ff6b6b"),
+            line("secondary_return_temp", "Return °C", "#4dabf7"),
+            line("secondary_flow", "Flow m³/h", "#51cf66", yaxis=2)]},
+        # pressure on axis 1, pump speeds on axis 2
+        {"id": CHART2_ID, "name": "Pressure & Pump Speed", "type": "realtime1", "lines": [
+            line("secondary_supply_pressure", "Supply kPa", "#ffa94d"),
+            line("circ_pump1_hz", "Pump 1 Hz", "#9775fa", yaxis=2),
+            line("circ_pump2_hz", "Pump 2 Hz", "#3bc9db", yaxis=2)]},
+    ]
 
     prj = requests.get(f"{FUXA}/api/project", timeout=20).json()
     prj = prj.get("data") or prj
@@ -323,7 +369,7 @@ def main():
     prj["hmi"]["views"] = [view]
     if prj.get("hmi", {}).get("layout"):
         prj["hmi"]["layout"]["start"] = view["id"]
-    prj["charts"] = [chart_def]
+    prj["charts"] = charts
 
     r = requests.post(f"{FUXA}/api/project", json=prj, timeout=30)
     print("POST /api/project ->", r.status_code, r.text[:200])
