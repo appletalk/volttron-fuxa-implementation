@@ -5,7 +5,7 @@
         "slave_id": 1
     },
     "driver_type": "modbus",
-    "registry_config": "config://modbus_sim.csv",
+    "registry_config": "config://heat_station.csv",
     "interval": 5,
     "timezone": "UTC",
     "publish_depth_first_all": true

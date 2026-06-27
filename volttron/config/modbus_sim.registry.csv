@@ -1,8 +1,0 @@
-Volttron Point Name,Modbus Register,Writable,Point Address,Units,Notes
-temperature,>H,FALSE,0,degC_x10,Read-only sensor (input reg) wanders
-humidity,>H,FALSE,1,pct_x10,Read-only sensor (input reg) wanders
-flow_rate,>H,FALSE,2,lpm_x10,Read-only sensor (input reg) wanders
-pump_speed,>H,TRUE,0,pct,Writable setpoint (holding reg)
-valve_open,>H,TRUE,1,pct,Writable setpoint (holding reg)
-run_command,>H,TRUE,2,bool,Writable setpoint (holding reg)
-pump_enable,BOOL,TRUE,0,onoff,Writable coil

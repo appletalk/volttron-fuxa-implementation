@@ -1,0 +1,28 @@
+Volttron Point Name,Modbus Register,Writable,Point Address,Units,Notes
+primary_supply_temp,>H,FALSE,0,degC,Primary main supply temperature
+primary_return_temp,>H,FALSE,1,degC,Primary main return temperature
+secondary_supply_temp,>H,FALSE,2,degC,Building loop supply temperature
+secondary_return_temp,>H,FALSE,3,degC,Building loop return temperature
+secondary_flow,>H,FALSE,4,m3/h,Secondary circulation flow
+instant_heat,>H,FALSE,5,GJ/h,Instantaneous heat delivered
+secondary_supply_pressure,>H,FALSE,6,kPa,Secondary supply pressure
+secondary_return_pressure,>H,FALSE,7,kPa,Secondary return pressure
+makeup_tank_level,>H,FALSE,8,pct,Makeup water tank level
+circ_pump1_hz,>H,FALSE,9,Hz,Circulation pump 1 VFD frequency
+circ_pump2_hz,>H,FALSE,10,Hz,Circulation pump 2 VFD frequency
+makeup_pump_hz,>H,FALSE,11,Hz,Makeup pump VFD frequency
+circ_pump1_status,>H,FALSE,12,code,Pump 1 status 0=off 1=run 2=fault
+circ_pump2_status,>H,FALSE,13,code,Pump 2 status 0=off 1=run 2=fault
+makeup_pump_status,>H,FALSE,14,code,Makeup pump status 0=off 1=run 2=fault
+circ_pump1_cmd,>H,TRUE,0,onoff,Circulation pump 1 start command
+circ_pump1_hz_sp,>H,TRUE,1,Hz,Circulation pump 1 speed setpoint
+circ_pump2_cmd,>H,TRUE,2,onoff,Circulation pump 2 start command
+circ_pump2_hz_sp,>H,TRUE,3,Hz,Circulation pump 2 speed setpoint
+makeup_pump_cmd,>H,TRUE,4,onoff,Makeup pump start command
+supply_setpoint,>H,TRUE,5,degC,Secondary supply temperature setpoint
+building_load,>H,TRUE,6,pct,Building heat demand
+circ_pump1_fault,BOOL,FALSE,0,bool,Circulation pump 1 VFD fault
+circ_pump2_fault,BOOL,FALSE,1,bool,Circulation pump 2 VFD fault
+makeup_vfd_fault,BOOL,FALSE,2,bool,Makeup pump VFD fault
+low_pressure_alarm,BOOL,FALSE,3,bool,System low pressure alarm
+high_supply_temp_alarm,BOOL,FALSE,4,bool,Supply over-temperature alarm

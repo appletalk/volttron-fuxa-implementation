@@ -38,10 +38,10 @@ log "platform is up"
 # --- 3. push driver configs into the config store ----------------------------
 # Stored under the platform.driver identity; the agent loads them on start and
 # live-reloads on change. CSV registry must be stored with --csv.
-log "storing platform.driver config + Modbus device"
+log "storing platform.driver config + heat-station Modbus device"
 vctl config store platform.driver config "$CFG/platform-driver.config"
-vctl config store platform.driver devices/campus/building/modbus_sim "$CFG/device.modbus_sim.json"
-vctl config store platform.driver modbus_sim.csv "$CFG/modbus_sim.registry.csv" --csv
+vctl config store platform.driver devices/campus/building/heat_station "$CFG/device.heat_station.json"
+vctl config store platform.driver heat_station.csv "$CFG/heat_station.registry.csv" --csv
 
 # --- 4. install + (re)start the agents ---------------------------------------
 # Install by BARE package name (no ==version): VOLTTRON records the whole

@@ -197,42 +197,45 @@ def correlate(output_point: str, input_point: str, values: list[float], settle_s
     return {"output_point": output_point, "input_point": input_point, "pairs": pairs}
 
 
-# --- Tier 4: scenario / fault injection (digital-twin testing) --------------
+# --- Tier 4: scenario / fault injection (heating-substation digital twin) ----
 @mcp.tool()
 def sim_state() -> dict:
-    """Current simulator state: live sensor values, which sensors are pinned
-    (held to a fixed value by a fault), and the available named scenarios."""
+    """Full simulator state: live measurements, operator controls (setpoints/
+    commands), alarm bits, active faults, and the available named scenarios."""
     return _get(SIM_URL, "/api/sim/state")
 
 
 @mcp.tool()
-def inject_fault(sensor: str, kind: str = "stuck") -> dict:
-    """Inject a fault into a wandering sensor so it propagates through VOLTTRON
-    to the bridge/FUXA (great for testing alarms and dashboards).
+def inject_fault(component: str, on: bool = True) -> dict:
+    """Inject (or clear) a plant fault; it cascades through VOLTTRON -> bridge ->
+    FUXA so the dashboard reacts (pump turns red, alarm fires, flow/heat drop).
 
-    sensor: 'temperature' | 'humidity' | 'flow_rate'.
-    kind: 'stuck' (freeze at current), 'high', 'low', 'zero', or 'clear' (remove).
+    component: 'circ_pump1' | 'circ_pump2' | 'makeup_pump' | 'primary'
+               (primary = loss of the city heat main).
+    on: True to fault, False to clear.
     """
-    return _post(SIM_URL, "/api/sim/fault", {"name": sensor, "kind": kind})
+    return _post(SIM_URL, "/api/sim/fault", {"name": component, "on": on})
 
 
 @mcp.tool()
-def set_sim_point(sensor: str, value: float, hold: bool = True) -> dict:
-    """Force a simulator sensor to a specific raw value (e.g. temperature 235 =
-    23.5 C). hold=True pins it (wander stops); hold=False sets it for one tick."""
-    return _post(SIM_URL, "/api/sim/point", {"name": sensor, "value": value, "hold": hold})
+def set_control(name: str, value: float) -> dict:
+    """Set an operator control / setpoint on the plant (also writable from the
+    FUXA buttons). Names: circ_pump1_cmd, circ_pump1_hz_sp, circ_pump2_cmd,
+    circ_pump2_hz_sp, makeup_pump_cmd, supply_setpoint, building_load."""
+    return _post(SIM_URL, "/api/sim/point", {"name": name, "value": value})
 
 
 @mcp.tool()
 def load_scenario(name: str) -> dict:
-    """Load a named simulator scenario (clears prior faults first). Options:
-    'normal', 'overheat', 'sensor_failure', 'humidity_spike', 'frozen_plant'."""
+    """Load a named plant scenario (clears prior faults first). Options:
+    'normal', 'morning_startup', 'peak_load', 'circ_pump_trip',
+    'makeup_vfd_fault', 'loss_of_primary'."""
     return _post(SIM_URL, "/api/sim/scenario", {"name": name})
 
 
 @mcp.tool()
 def reset_sim() -> dict:
-    """Clear all injected faults / holds; sensors resume normal wandering."""
+    """Reset the plant to the 'normal' operating scenario (clears all faults)."""
     return _post(SIM_URL, "/api/sim/reset", {})
 
 

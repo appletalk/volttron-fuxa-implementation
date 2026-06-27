@@ -51,17 +51,22 @@ when prompted. Then ask Claude things like *"what's the temperature trend?"* or
 | `checkout_point(point, test_values, timeout_s)` | round-trip a writable point through values, verify each, restore original |
 | `correlate(output_point, input_point, values, settle_s)` | ramp an output, record an input — check control linkages |
 
-### Tier 4 — scenario / fault injection
+### Tier 4 — scenario / fault injection (heating-substation digital twin)
 | Tool | Purpose |
 |---|---|
-| `sim_state` | live sensor values + which sensors are pinned by faults |
-| `inject_fault(sensor, kind)` | `stuck`/`high`/`low`/`zero`/`clear` on a sensor; propagates through the whole stack |
-| `set_sim_point(sensor, value, hold)` | force a sensor to a value |
-| `load_scenario(name)` | `normal`, `overheat`, `sensor_failure`, `humidity_spike`, `frozen_plant` |
-| `reset_sim` | clear all faults; sensors resume wandering |
+| `sim_state` | live measurements, controls, alarms, active faults, scenarios |
+| `inject_fault(component, on)` | fault/clear `circ_pump1`/`circ_pump2`/`makeup_pump`/`primary`; cascades to the dashboard |
+| `set_control(name, value)` | set an operator setpoint/command (e.g. `building_load`, `supply_setpoint`, `circ_pump1_hz_sp`) |
+| `load_scenario(name)` | `normal`, `morning_startup`, `peak_load`, `circ_pump_trip`, `makeup_vfd_fault`, `loss_of_primary` |
+| `reset_sim` | reset to the `normal` scenario |
 
-*(Tier 2 — provisioning new VOLTTRON devices + generating FUXA dashboards — is
-the next addition.)*
+## FUXA dashboard generator (`build_dashboard.py`)
+
+`python build_dashboard.py` generates a complete heating-substation HMI (schematic
+with animated pumps, heat exchanger, pipes, live readouts, makeup tank, alarm
+panel, real-time trend, operator buttons) and pushes it to FUXA via
+`POST /api/project`, bound to the live `heat_station` device tags. This is the
+Tier-2 build-automation capability (programmatic VOLTTRON device + FUXA dashboard).
 
 ## Write safety scaffold
 
