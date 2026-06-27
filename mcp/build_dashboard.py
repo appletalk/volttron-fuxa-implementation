@@ -154,10 +154,20 @@ def button(x, y, w, h, label, p, val, color="#2d6cdf"):
          "label": "HtmlButton"})
 
 
-def chart(x, y, w, h, chart_id):
+def chart(x, y, w, h, chart_id, y1=None, y2=None):
     # initElement finds the chart host DIV via the 'D-' prefix; the foreignObject
     # uses 'H-'. Without these the ChartUplot component is never created.
     gid = uid("HXC")
+    # FUXA reads scaleY1/Y2 min/max to PIN each y-axis range. Pinning both:
+    #  (a) gives defined, labelled left (Y1) and right (Y2) scales, and
+    #  (b) stops uPlot's auto-range from collapsing on flat data (which was
+    #      pruning multi-line series). legend.live=false -> static legend.
+    # y1/y2 are (min, max) tuples.
+    opts = {"legend": {"live": False}}
+    if y1:
+        opts["scaleY1min"], opts["scaleY1max"] = y1
+    if y2:
+        opts["scaleY2min"], opts["scaleY2max"] = y2
     add(f'<g id="{gid}" type="svg-ext-html_chart" fill="#ffffff" font-size="14" '
         f'font-family="sans-serif" text-anchor="right" stroke="#000000">'
         f'<rect stroke-width="0" x="{x}" y="{y}" width="{w}" height="{h}" id="{gid}_r" fill="#f4f7fb" stroke="null"/>'
@@ -166,10 +176,8 @@ def chart(x, y, w, h, chart_id):
         f'background-color:#f4f7fb;border-radius:4px;" id="D-{gid}"></DIV>'
         f'</foreignObject></g>',
         {"id": gid, "type": "svg-ext-html_chart", "name": "Trend",
-         # legend.live=false -> static legend (series labels only); kills the
-         # uPlot idle-cursor "--" values and the epoch-0 (1969) time readout.
-         "property": {"id": chart_id, "type": "realtime1",
-                      "options": {"legend": {"live": False}}}, "label": "HtmlChart"})
+         "property": {"id": chart_id, "type": "realtime1", "options": opts},
+         "label": "HtmlChart"})
 
 
 def kpi(x, y, w, label, p, units, color):
@@ -268,8 +276,8 @@ for i, (lab, p, u, c) in enumerate(labels):
     value(290, yy, p, u, 15, c, "end")
 
 # ---- Real-time trend (bottom band, tall enough for a proper plot + y-axis) ----
-text(56, 594, "REAL-TIME TREND · Secondary Flow (m³/h)", 12, "#9fd0ff", "start", "bold")
-chart(50, 600, 600, 188, CHART_ID)
+text(56, 594, "REAL-TIME TREND · Temperature (left axis) & Flow (right axis)", 12, "#9fd0ff", "start", "bold")
+chart(50, 600, 600, 188, CHART_ID, y1=(40, 90), y2=(0, 140))
 
 # ---- Operator control panel (bottom) ----
 PX = 700
@@ -343,16 +351,17 @@ def main():
             "profile": {"width": 1280, "height": 800, "bkcolor": "#0a1622ff"},
             "items": items, "variables": {}, "svgcontent": svg,
             "property": {"events": []}}
-    def line(point, label, color):
-        return {"id": TID(point), "name": point, "label": label,
+    def line(point, label, color, yaxis=1):
+        return {"id": TID(point), "name": point, "label": label, "yaxis": yaxis,
                 "device": DEVICE_NAME, "color": color, "lineWidth": 2}
-    # ONE line per chart: FUXA's realtime multi-line chart drops flat series when
-    # uPlot's y-range collapses (and we can't pin scales.y). A single line always
-    # auto-ranges to its own data and plots reliably. Exact supply/return/pump
-    # values are all in the readout panel; these trends show the moving picture.
+    # Dual-axis: supply/return temperature on Y1 (left), flow on Y2 (right).
+    # Both axes pinned (see chart()) so all three lines hold even when flat.
     charts = [
-        {"id": CHART_ID, "name": "Secondary Flow (m³/h)", "type": "realtime1", "lines": [
-            line("secondary_flow", "Flow m³/h", "#51cf66")]},
+        {"id": CHART_ID, "name": "Temperature (°C, left)  ·  Flow (m³/h, right)",
+         "type": "realtime1", "lines": [
+            line("secondary_supply_temp", "Supply °C", "#ff6b6b", 1),
+            line("secondary_return_temp", "Return °C", "#4dabf7", 1),
+            line("secondary_flow", "Flow m³/h", "#51cf66", 2)]},
     ]
 
     prj = requests.get(f"{FUXA}/api/project", timeout=20).json()
