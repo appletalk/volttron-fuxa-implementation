@@ -23,6 +23,9 @@ which is exactly the (path, point) split set_point expects.
 
 import json
 import logging
+import sqlite3
+from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qs
 
 import gevent
 from gevent.pywsgi import WSGIServer
@@ -38,7 +41,23 @@ log = logging.getLogger("fuxa-bridge")
 DEVICES_PREFIX = "devices/"
 ALL_SUFFIX = "/all"
 DRIVER_PEER = "platform.driver"
+CONFIG_PEER = "config.store"
 LISTEN = ("0.0.0.0", 8080)
+HISTORIAN_DB = "/home/volttron/.volttron/data/historian.sqlite"
+
+
+def _coerce(s):
+    """Parse a historian value_string back into a bool/int/float, else leave it."""
+    if s is None:
+        return None
+    low = str(s).strip().lower()
+    if low in ("true", "false"):
+        return low == "true"
+    try:
+        f = float(s)
+        return int(f) if f.is_integer() else f
+    except (ValueError, TypeError):
+        return s
 
 
 class Bridge:
@@ -83,6 +102,49 @@ class Bridge:
             DRIVER_PEER, "set_point", path, point, value
         ).get(timeout=15)
 
+    # --- gateway: history / devices / platform ------------------------------
+    def history(self, point, minutes, limit):
+        """Time series for a point from the sqlite historian (newest first)."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat()
+        con = sqlite3.connect(f"file:{HISTORIAN_DB}?mode=ro", uri=True)
+        try:
+            cur = con.execute(
+                "SELECT d.ts, d.value_string FROM data d "
+                "JOIN topics t ON t.topic_id = d.topic_id "
+                "WHERE t.topic_name = ? AND d.ts >= ? "
+                "ORDER BY d.ts DESC LIMIT ?",
+                (point, cutoff, limit),
+            )
+            return [{"ts": ts, "value": _coerce(v)} for ts, v in cur.fetchall()]
+        finally:
+            con.close()
+
+    def devices(self):
+        """Group the live point cache by device path -> {point: value}."""
+        out = {}
+        for key, entry in self.latest.items():
+            idx = key.rfind("/")
+            path, point = key[:idx], key[idx + 1:]
+            out.setdefault(path, {})[point] = entry.get("value")
+        return out
+
+    def platform(self):
+        """Health summary: agents on the bus, point/device counts, freshness."""
+        try:
+            agents = sorted(self.agent.vip.peerlist().get(timeout=5))
+        except Exception as e:  # noqa: BLE001 - report rather than crash
+            agents = []
+            log.warning("peerlist failed: %s", e)
+        last = max((e.get("ts") or "" for e in self.latest.values()), default=None)
+        return {
+            "bridge_connected": True,
+            "agents": agents,
+            "point_count": len(self.latest),
+            "device_count": len(self.devices()),
+            "last_update": last or None,
+            "ws_clients": len(self.clients),
+        }
+
     # --- WSGI / WebSocket ----------------------------------------------------
     def wsgi(self, environ, start_response):
         path = environ.get("PATH_INFO", "")
@@ -97,8 +159,32 @@ class Bridge:
             return self._json(start_response, self.latest)
         if path == "/api/points" and method in ("PUT", "POST"):
             return self._write(environ, start_response)
+        if path == "/api/devices" and method == "GET":
+            return self._json(start_response, self.devices())
+        if path == "/api/platform" and method == "GET":
+            return self._json(start_response, self.platform())
+        if path == "/api/history" and method == "GET":
+            return self._history(environ, start_response)
         start_response("404 Not Found", [("Content-Type", "text/plain")])
         return [b"not found"]
+
+    def _history(self, environ, start_response):
+        qs = parse_qs(environ.get("QUERY_STRING", ""))
+        point = (qs.get("point") or [None])[0]
+        if not point:
+            start_response("400 Bad Request", [("Content-Type", "application/json")])
+            return [json.dumps({"error": "missing 'point' query param"}).encode()]
+        minutes = int((qs.get("minutes") or ["60"])[0])
+        limit = int((qs.get("limit") or ["1000"])[0])
+        try:
+            samples = self.history(point, minutes, limit)
+            return self._json(start_response, {
+                "point": point, "minutes": minutes, "count": len(samples), "samples": samples,
+            })
+        except Exception as e:  # noqa: BLE001
+            log.exception("history query failed")
+            start_response("500 Internal Server Error", [("Content-Type", "application/json")])
+            return [json.dumps({"error": str(e)}).encode()]
 
     def _serve_ws(self, ws):
         self.clients.add(ws)

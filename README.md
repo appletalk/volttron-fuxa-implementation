@@ -107,6 +107,17 @@ service builds the fork locally (`build: ../FUXA`).
 | `GET /api/points` | snapshot `{ "<campus>/<building>/<device>/<point>": {"value","ts"} }` |
 | `PUT /api/points` | body `{"path","point","value"}` → `platform.driver` `set_point`; returns written value |
 | `WS  /ws` | on connect `{"type":"snapshot","points":{...}}`, then `{"type":"update","points":{...}}` per scrape |
+| `GET /api/devices` | devices grouped by path → `{point: value}` |
+| `GET /api/platform` | health: agents on the bus, point/device counts, freshness |
+| `GET /api/history?point=&minutes=&limit=` | historian time series for a point |
+
+## Claude MCP server (`mcp/`)
+
+A local [MCP](https://modelcontextprotocol.io) server (`mcp/server.py`) lets Claude
+drive this stack directly — read/write points, query history, inspect health, and
+(incrementally) run tests, inject faults, and build devices/dashboards. It's a thin
+tool layer over the bridge + FUXA + sim. Setup and tool list: [`mcp/README.md`](mcp/README.md).
+Registered via project-scoped `.mcp.json`; reconnect Claude Code in this dir to enable it.
 
 Runs inside the `volttron` container (launched by the entrypoint) as a dynamic
 agent — `build_agent()` connects over IPC via `VOLTTRON_HOME`, no extra auth.

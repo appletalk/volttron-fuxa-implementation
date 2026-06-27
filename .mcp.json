@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "volttron-fuxa": {
+      "command": "/home/keith/development/volttron-fuxa-implementation/mcp/run.sh"
+    }
+  }
+}
