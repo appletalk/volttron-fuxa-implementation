@@ -244,7 +244,7 @@ pipe(1075, 330, 1075, 300, HOT)
 pipe(1075, 560, 1000, 560, COLD)
 
 # ---- Central trend (the live story): temperatures + flow ----
-text(366, 392, "REAL-TIME TREND · Supply / Return Temperature", 12, "#9fd0ff", "start", "bold")
+text(366, 392, "REAL-TIME TREND · Heat Output", 12, "#9fd0ff", "start", "bold")
 chart(360, 400, 620, 150, CHART_ID)
 
 # ---- Secondary readouts panel (left) ----
@@ -272,7 +272,7 @@ value(560, 730, "makeup_pump_hz", "Hz", 12, "#cfe9ff", "middle")
 pipe(480, 690, 540, 690, COLD)
 
 # ---- Trend (bottom left): pressures & pump speed ----
-text(70, 610, "CIRCULATION PUMP SPEED", 12, "#9fd0ff", "start", "bold")
+text(70, 610, "SECONDARY FLOW", 12, "#9fd0ff", "start", "bold")
 chart(60, 618, 290, 150, CHART2_ID)
 
 # ---- Operator control panel (bottom) ----
@@ -350,15 +350,15 @@ def main():
     def line(point, label, color):
         return {"id": TID(point), "name": point, "label": label,
                 "device": DEVICE_NAME, "color": color, "lineWidth": 2}
-    # Each chart keeps a SINGLE y-axis of same-unit lines (no Y1/Y2 split):
-    # one clean readable scale; exact values live in the readout panel.
+    # ONE line per chart: FUXA's realtime multi-line chart drops flat series when
+    # uPlot's y-range collapses (and we can't pin scales.y). A single line always
+    # auto-ranges to its own data and plots reliably. Exact supply/return/pump
+    # values are all in the readout panel; these trends show the moving picture.
     charts = [
-        {"id": CHART_ID, "name": "Supply / Return Temperature (°C)", "type": "realtime1", "lines": [
-            line("secondary_supply_temp", "Supply °C", "#ff6b6b"),
-            line("secondary_return_temp", "Return °C", "#4dabf7")]},
-        {"id": CHART2_ID, "name": "Circulation Pump Speed (Hz)", "type": "realtime1", "lines": [
-            line("circ_pump1_hz", "Pump 1 Hz", "#9775fa"),
-            line("circ_pump2_hz", "Pump 2 Hz", "#3bc9db")]},
+        {"id": CHART_ID, "name": "Heat Output (GJ/h)", "type": "realtime1", "lines": [
+            line("instant_heat", "Heat GJ/h", "#ffd479")]},
+        {"id": CHART2_ID, "name": "Secondary Flow (m³/h)", "type": "realtime1", "lines": [
+            line("secondary_flow", "Flow m³/h", "#51cf66")]},
     ]
 
     prj = requests.get(f"{FUXA}/api/project", timeout=20).json()
