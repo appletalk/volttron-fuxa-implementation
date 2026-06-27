@@ -1,11 +1,15 @@
 # Power Plant POC — Build Handoff
 
-**Mission:** build an *exceptional* power-plant SCADA dashboard POC on the
-already-proven VOLTTRON ↔ FUXA ↔ MCP pipeline. The heating-substation POC
-(already built and verified) is the reference implementation — the power plant
-is built the **same way**, just with a richer process model and a more ambitious
-dashboard. The audience is an electrical engineer who builds power plants, so
-lean into the **electrical generation + grid** side as much as the thermal side.
+**Mission:** build an *exceptional* SCADA dashboard POC for a **utility-scale
+solar PV + battery (BESS) plant** on the already-proven VOLTTRON ↔ FUXA ↔ MCP
+pipeline. The heating-substation POC (already built and verified) is the
+reference implementation — the solar plant is built the **same way**, just with a
+richer process model and a more ambitious dashboard. The audience is an
+electrical engineer who builds power plants, so **lead with the electrical /
+grid-interconnection side** (MW/MVAR/kV/Hz, inverters, breaker, POI), and the
+physics will be scrutinized — get the PV/inverter/BESS math right (see §4
+*Physics that will be scrutinized*). It's a demo, so first-order models are fine,
+but they must be the *correct* first-order models, validated against references.
 
 > This doc is self-contained, but four auto-memory files also persist across
 > context clears and carry the gory details: `project-state`, `mcp-server`,
@@ -168,119 +172,159 @@ substation also stays as a working reference. Changes vs §3:
 
 ---
 
-## 4. Power-plant DESIGN (make this part exceptional)
+## 4. Solar plant DESIGN (make this part exceptional)
 
-A conventional **thermal (steam) power plant** is the richest, most legible
-choice and showcases the electrical side the audience cares about:
+The plant is a **utility-scale solar PV plant with battery storage (BESS)** —
+modern, very rich on the electrical side, and *simpler* to model than a thermal
+cycle (no steam dynamics). The "fuel" is sunlight, a naturally compelling demo
+driver: output follows the sun, a cloud passes and the battery smooths it. The
+second device/view (`power_plant`, or rename to `solar_plant`) is this plant.
 
 ```
- fuel ─> BOILER ═steam═> TURBINE ─shaft─> GENERATOR ─> XFMR ─[breaker]─> GRID
-            ^                                 |excitation
-            │                                 v
-       feedwater <── CONDENSER <══════════════╯ (exhaust steam)
-            ^                                        ^
-       feed pump                                cooling water
+ ☀ irradiance
+    │
+ [PV ARRAYS] ═DC═> [INVERTERS] ═AC═> [MV XFMR] ─[breaker]─> [POI] ──> GRID
+                       ▲                            ▲
+                  [BESS battery] ─charge/discharge──┘   plant controller
+                                                        (setpoint / curtail)
 ```
 
-### Suggested point list (~30; tune as you like)
+### Suggested point list (~30; tune freely)
 
-**Electrical (lead with these — the headline story):**
-- `generator_mw` (active power, MW) — the product
-- `generator_mvar` (reactive power, MVAR)
-- `generator_voltage_kv` (terminal voltage, kV; ~13–22 kV)
-- `generator_frequency_hz` (×10 if you want 0.1 Hz resolution, else integer; ~50/60)
-- `grid_frequency_hz`
-- `excitation_current_a` (field current)
+**Electrical (lead — the headline story):**
+- `plant_active_power_mw` — net export to grid (the product; e.g. 0–100 MW)
+- `plant_reactive_power_mvar`
+- `poi_voltage_kv` (point of interconnection; ~33/66 kV)
+- `grid_frequency_hz` (×10 for 0.1 Hz, else integer; ~50/60)
 - `power_factor` (×100)
-- `breaker_status` (0 open / 1 closed) — *status, read-only*
-- `sync_status` (0 not-ready / 1 in-sync / 2 synced/closed)
+- `main_breaker_status` (0 open / 1 closed) — *read-only status*
 
-**Thermal / mechanical:**
-- `boiler_pressure_bar` (~160)
-- `boiler_drum_level_pct`
-- `main_steam_temp_c` (~540)
-- `main_steam_flow_th` (t/h)
-- `turbine_speed_rpm` (×0.1? prefer integer rpm; 3000/3600)
-- `turbine_inlet_pressure_bar`
-- `condenser_vacuum_kpa`
-- `condenser_temp_c`
-- `feedwater_flow_th`
-- `feedwater_temp_c`
-- `furnace_temp_c`
-- `cooling_water_temp_c`
+**PV / generation:**
+- `irradiance_wm2` (0–1000+; the fuel / external driver)
+- `pv_dc_power_mw`
+- `inverter_ac_power_mw` (aggregate)
+- `inverter1_status` … `inverterN_status` (0 off / 1 run / 2 fault; N≈3–4 → a
+  nice status array)
+- `inverter_efficiency_pct`
+- `ambient_temp_c`, `panel_temp_c` (panels run hotter in sun → derate)
+- `tracker_angle_deg` (single-axis tracking; follows the sun)
+
+**BESS (battery):**
+- `battery_soc_pct` (state of charge)
+- `battery_power_mw` (signed: + discharge / − charge — store ×10 or offset if you
+  want sign without negatives; e.g. store `mw+50`, display −50…+50)
+- `battery_temp_c`
+- `bess_status` (0 idle / 1 discharge / 2 charge / 3 fault)
 
 **Controls (writable holding regs):**
-- `load_setpoint_mw` (governor/MW demand)
-- `excitation_setpoint_kv` (AVR voltage target)
-- `fuel_demand_pct` (firing rate)
-- `feedwater_pump_cmd` (0/1) + `feedwater_pump_speed_pct`
-- `breaker_cmd` (0 open / 1 close — operator close-to-grid)
-- `turbine_trip_cmd` (0/1)
+- `power_setpoint_mw` (plant-controller export cap / curtailment)
+- `mvar_setpoint` (reactive dispatch)
+- `bess_mode` (0 auto-smooth / 1 force-charge / 2 force-discharge)
+- `bess_power_cmd_mw`
+- `breaker_cmd` (0 open / 1 close)
+- `tracker_enable` (0/1)
 
 **Alarms (discrete inputs):**
-- `high_boiler_pressure`, `low_drum_level`, `high_steam_temp`,
-  `turbine_overspeed`, `gen_over_voltage`, `gen_under_frequency`,
-  `loss_of_excitation`, `breaker_trip`, `condenser_vacuum_low`
+- `inverter_fault`, `grid_over_voltage`, `grid_under_frequency`, `breaker_trip`,
+  `battery_over_temp`, `low_soc`, `dc_ground_fault`, `comms_loss`,
+  `curtailment_active`
 
-### Coupled dynamics (what makes it feel real)
+### Coupled dynamics (clean and very legible)
 
-- `fuel_demand` → `furnace_temp` → `boiler_pressure` & `main_steam_flow` (lagged).
-- steam flow + governor valve (driven by `load_setpoint_mw`) → turbine mechanical
-  power → `generator_mw` **only when `breaker_status==1`** (synced). Before sync,
-  turbine power spins the rotor → `turbine_speed_rpm` toward nominal.
-- `generator_mw` vs grid: when synced, MW exports to grid (frequency held at grid
-  value). When **islanded / breaker open**, a mismatch between mechanical power
-  and load swings `generator_frequency_hz` (over-speed on load rejection).
-- `excitation_setpoint` → `generator_voltage_kv` & `generator_mvar` (AVR).
-- `feedwater_flow` must balance `main_steam_flow` or `boiler_drum_level` drifts →
-  low-drum-level trip if it empties.
-- `condenser_vacuum` affects efficiency; vacuum loss raises back-pressure → trip.
-- A **turbine trip** drops mechanical power → load rejection → breaker opens →
-  generator over-frequency spike → MW to 0.
+- `irradiance` is the external driver (set by scenario / a daily curve).
+- `panel_temp = ambient_temp + irradiance × k` → a temperature **derate** factor
+  (hotter panels = less efficient).
+- `pv_dc_power = (irradiance/1000) × capacity × derate(panel_temp)`.
+- inverters: `inverter_ac_power = pv_dc_power × inverter_efficiency`, **only when
+  `main_breaker_status==1`**; a faulted inverter drops its share.
+- **BESS smoothing / dispatch (the compelling part):** in auto mode the battery
+  **charges** when `inverter_ac > power_setpoint` (store the excess) and
+  **discharges** when `inverter_ac < power_setpoint` (hold the output) →
+  `battery_soc` drifts; force modes override. `plant_active_power =
+  inverter_ac ± battery_power`, capped at `power_setpoint` (curtailment).
+- reactive: `mvar_setpoint` → `plant_reactive_power` → nudges `poi_voltage`.
+- `tracker_angle` follows the sun across the day (mostly cosmetic + small effect).
+- a **cloud** = a sharp `irradiance` dip → PV drops → in auto mode the battery
+  discharges to hold output (SOC falls), recovering when the cloud passes.
 
-### Scenarios (the demo gold — script a startup!)
+### Scenarios (the demo gold — script a sunny day!)
 
-- `cold_start` — boiler cold; fire up. A great **sequenced** demo: fuel on →
-  pressure builds → steam → roll turbine to 3000 rpm → match voltage/freq →
-  `breaker_cmd=1` to synchronize → ramp `load_setpoint_mw`. Each step visibly
-  cascades.
-- `normal` / `base_load` — steady at e.g. 250 MW.
-- `load_ramp_up` / `peak` — push to max MW, watch fuel/steam/feedwater follow.
-- `turbine_trip` — overspeed, breaker opens, MW→0, alarms.
-- `loss_of_grid` (islanding) — breaker opens under load → frequency excursion.
-- `loss_of_feedwater` — drum level falls → low-level alarm → trip.
-- `loss_of_excitation` — voltage/MVAR collapse, alarm.
-- `condenser_vacuum_loss` — back-pressure rises → trip.
+- `sunrise` — irradiance ramps 0→1000, output follows, trackers swing up.
+- `peak_sun` — full irradiance, max MW; if `pv > setpoint` the battery charges.
+- **`cloud_passing`** — irradiance dips to ~300 then recovers; battery discharges
+  to hold output (the signature smoothing moment).
+- `curtailment` — grid lowers `power_setpoint`; excess PV charges the battery /
+  curtails, `curtailment_active` raised.
+- `evening` / `sunset` — irradiance ramps down; battery covers the shoulder.
+- `inverter_trip` — one inverter faults → MW step-down, alarm, status red.
+- `grid_fault` — voltage/frequency excursion (ride-through); breaker may trip.
+- `bess_dispatch` — grid service: force-discharge the battery into the grid.
+- `low_soc` — battery depleted → can't smooth → alarm.
+
+### Physics that will be scrutinized — get these right
+
+An electrical engineer who builds plants will sanity-check the numbers. These
+models are the standard, simple, defensible ones (PVWatts/NREL-style). It's a
+demo, so first-order is fine — but use *these* relationships, not made-up ones.
+**Validate them in the opening research workflow** against PVWatts / NREL SAM /
+real plant one-lines before committing the constants.
+
+- **Cell/panel temperature (NOCT model):**
+  `T_cell = T_amb + (NOCT − 20)/800 × G`, with NOCT ≈ 45 °C → `T_cell ≈ T_amb +
+  0.03125 × G`. (At G=1000, T_amb=25 → ~56 °C — realistic.)
+- **DC power with temperature derate:**
+  `P_dc = (G/1000) × P_dc_stc × [1 + γ_P × (T_cell − 25)]`, temperature
+  coefficient of power `γ_P ≈ −0.0037 /°C` (≈ −0.37 %/°C). At 56 °C that's about
+  −11 % — a number an EE expects to see.
+- **Inverter conversion + CLIPPING (impress them):** size DC larger than AC,
+  `ILR = P_dc_stc / P_ac_rated ≈ 1.2–1.3`. `P_ac = min(P_dc × η_inv,
+  P_ac_rated)`, inverter efficiency `η_inv ≈ 0.98–0.99`. At high irradiance the
+  AC **clips** flat at `P_ac_rated` while DC keeps rising — a real, recognizable
+  behaviour worth showing on the MW-vs-irradiance trend.
+- **Plant export & curtailment:** `P_plant = min(P_ac ± P_batt, P_setpoint)`.
+- **BESS (e.g. 25 MW / 100 MWh, 4-hour):** `SOC += −P_batt·Δt / E_cap` (discharge
+  P_batt>0 lowers SOC), usable SOC ~10–90 %, round-trip efficiency ~0.88. In auto
+  mode the battery sources/sinks `P_ac − P_setpoint` to hold output.
+- **Reactive / voltage:** inverters provide reactive within a power-factor
+  envelope (~±0.95 PF → `Q_max ≈ ±0.33 × P_rated`). `mvar_setpoint` → small
+  `poi_voltage` deviation around nominal.
+- **Suggested ratings:** 100 MWac plant, ~125 MWdc (ILR 1.25), POI at 34.5 kV
+  collector → 115/230 kV (pick one), 60 Hz (US) or 50 Hz, single-axis trackers
+  ±60°. Performance ratio ≈ 0.8 overall.
+- **Integer-native storage:** MW/MVAR/kV/°C/%/Hz as integers; W/m² as integer;
+  power factor ×100; frequency ×10 if you want 0.1 Hz. Battery power is signed —
+  store with an offset (e.g. value = MW + 50, display − 50…+50) to stay in
+  unsigned 16-bit Modbus regs.
 
 ### Dashboard ideas (aim higher than the substation)
 
-The substation is one clean SVG view with readouts, animated proc-eng pumps,
-semaphore alarms, single-line trends, and operator buttons. For the plant:
+The substation is one clean SVG view. For the solar plant:
 
-- **A real plant schematic**: boiler, superheater, turbine, generator,
-  transformer, condenser, feedwater + cooling loops as colored pipes (steam =
-  orange/red, water = blue), animated pumps/valves (proc-eng), the generator and
-  breaker.
-- **An electrical one-line strip**: GEN → breaker (animated open/closed) → bus →
-  XFMR → GRID, with **big MW / MVAR / kV / Hz** numbers. This is the money shot
-  for an electrical engineer.
-- **Headline KPI tiles**: MW (huge), Frequency Hz, Terminal kV, Boiler bar.
-- **A sync indicator**: a simple "IN SYNC / SYNCED / OFFLINE" lamp driven by
-  `sync_status` ranges (grey/amber/green) — or get fancy with a synchroscope.
-- **Trends**: MW output, frequency, boiler pressure, drum level (single-line each
-  for reliability — see §5 chart notes).
-- **Annunciator alarm panel** (the discrete alarms as semaphores).
-- **Operator controls**: load setpoint buttons, excitation, **CLOSE BREAKER** /
-  **TRIP** buttons (onSetValue), feedwater pump start/stop.
-- **Consider multiple views** (FUXA supports many views in `hmi.views`): an
-  *Overview*, an *Electrical one-line*, a *Boiler/Thermal* detail. Add a nav
-  header. (Substation used a single view; the plant earns more.)
+- **A solar-farm schematic**: ☀ + PV array blocks → combiners → **inverter units
+  (status-colored)** → MV transformer → breaker → POI → grid; a **BESS branch**
+  with a battery + a charge/discharge arrow. DC lines one colour, AC another.
+- **An electrical one-line strip**: PV + BESS → INVERTERS → XFMR → breaker
+  (animated open/closed) → POI → GRID, with **big MW / MVAR / kV / Hz** numbers —
+  the money shot for an EE.
+- **Headline KPI tiles**: Plant MW (huge), Irradiance W/m² (the fuel), POI kV,
+  Frequency Hz, Battery SOC %.
+- **A sun / irradiance gauge** and a **BESS SOC bar** (gauge_progress) with a
+  charge/discharge lamp (semaphore coloured by `bess_status`).
+- **Inverter status array**: N semaphores (green run / red fault).
+- **Trends (use the dual-axis chart we nailed):** **Plant MW vs Irradiance** —
+  pin scaleY1/Y2 and watch power track the sun *and clip* at peak; and **Battery
+  SOC vs Battery Power**.
+- **Annunciator alarm panel** (discrete alarms as semaphores).
+- **Operator controls**: power-setpoint buttons, MVAR, **BESS mode**
+  (auto/charge/discharge), **CLOSE/OPEN BREAKER** (onSetValue).
+- **Consider multiple views** (FUXA `hmi.views`): *Overview*, *Electrical
+  one-line*, *BESS detail* — switch with the nav buttons/menu from §3b.
 
 **To make it "exceptional," push the visuals:** explore FUXA's gauge library
-beyond what the substation used — there are radial/dial gauges, switches, the
-full proc-eng symbol set (valves, tanks, motors, etc.). Use real **radial gauges
-for MW / Hz / kV** instead of plain text. Script the `cold_start` sequence as the
-signature demo and capture it.
+beyond the substation — radial/dial gauges (great for MW / Hz / kV / SOC),
+switches, the proc-eng symbol set. Script the **`sunrise → peak (with clipping)
+→ cloud (battery smooths) → evening`** day-in-the-life as the signature demo and
+capture it — the battery covering a passing cloud is the moment that sells it.
 
 ---
 
@@ -395,12 +439,17 @@ Copy this file as the power-plant generator and swap the layout + points.
 
 ## 6. Definition of "done / exceptional"
 
-- `docker compose up` → a power-plant dashboard at `:1881` that is **live**
-  (values stream), **animated** (pumps/valves/breaker change state/color), and
-  **MCP-driven** (a `cold_start` or `turbine_trip` scenario visibly cascades).
-- The electrical story is front and center: MW/MVAR/kV/Hz, breaker, sync.
-- A signature demo: *"Claude, cold-start the plant"* → boiler fires, turbine
-  rolls, syncs to grid, breaker closes, load ramps — captured in screenshots.
+- `docker compose up` → **both** the substation and solar-plant views live at
+  `:1881`, switchable from the nav (§3b).
+- The solar view is **live** (values stream), **animated** (inverters/breaker/
+  battery change state/colour), and **MCP-driven** (`cloud_passing` /
+  `inverter_trip` visibly cascade).
+- The electrical story is front and center: MW/MVAR/kV/Hz, inverters, breaker,
+  POI; the PV/BESS physics is credible (temperature derate, inverter clipping,
+  SOC balance — §4).
+- A signature demo: *"Claude, run a day at the solar plant"* → `sunrise → peak
+  (clipping) → cloud (battery smooths) → evening` — captured in screenshots, with
+  the MW-vs-irradiance trend telling the story.
 - Honest trade-offs documented (the FUXA chart limits, the entrypoint restart
   gotcha).
 
