@@ -244,7 +244,7 @@ pipe(1075, 330, 1075, 300, HOT)
 pipe(1075, 560, 1000, 560, COLD)
 
 # ---- Central trend (the live story): temperatures + flow ----
-text(366, 392, "REAL-TIME TREND · Supply / Return Temp & Flow", 12, "#9fd0ff", "start", "bold")
+text(366, 392, "REAL-TIME TREND · Supply / Return Temperature", 12, "#9fd0ff", "start", "bold")
 chart(360, 400, 620, 150, CHART_ID)
 
 # ---- Secondary readouts panel (left) ----
@@ -272,7 +272,7 @@ value(560, 730, "makeup_pump_hz", "Hz", 12, "#cfe9ff", "middle")
 pipe(480, 690, 540, 690, COLD)
 
 # ---- Trend (bottom left): pressures & pump speed ----
-text(70, 610, "PRESSURE & PUMP SPEED", 12, "#9fd0ff", "start", "bold")
+text(70, 610, "CIRCULATION PUMP SPEED", 12, "#9fd0ff", "start", "bold")
 chart(60, 618, 290, 150, CHART2_ID)
 
 # ---- Operator control panel (bottom) ----
@@ -347,20 +347,18 @@ def main():
             "profile": {"width": 1280, "height": 800, "bkcolor": "#0a1622ff"},
             "items": items, "variables": {}, "svgcontent": svg,
             "property": {"events": []}}
-    def line(point, label, color, yaxis=1):
+    def line(point, label, color):
         return {"id": TID(point), "name": point, "label": label,
-                "device": DEVICE_NAME, "color": color, "yaxis": yaxis, "lineWidth": 2}
+                "device": DEVICE_NAME, "color": color, "lineWidth": 2}
+    # Each chart keeps a SINGLE y-axis of same-unit lines (no Y1/Y2 split):
+    # one clean readable scale; exact values live in the readout panel.
     charts = [
-        # temps on axis 1, flow on axis 2 so temperatures use the full height
-        {"id": CHART_ID, "name": "Temperatures & Flow", "type": "realtime1", "lines": [
+        {"id": CHART_ID, "name": "Supply / Return Temperature (°C)", "type": "realtime1", "lines": [
             line("secondary_supply_temp", "Supply °C", "#ff6b6b"),
-            line("secondary_return_temp", "Return °C", "#4dabf7"),
-            line("secondary_flow", "Flow m³/h", "#51cf66", yaxis=2)]},
-        # pressure on axis 1, pump speeds on axis 2
-        {"id": CHART2_ID, "name": "Pressure & Pump Speed", "type": "realtime1", "lines": [
-            line("secondary_supply_pressure", "Supply kPa", "#ffa94d"),
-            line("circ_pump1_hz", "Pump 1 Hz", "#9775fa", yaxis=2),
-            line("circ_pump2_hz", "Pump 2 Hz", "#3bc9db", yaxis=2)]},
+            line("secondary_return_temp", "Return °C", "#4dabf7")]},
+        {"id": CHART2_ID, "name": "Circulation Pump Speed (Hz)", "type": "realtime1", "lines": [
+            line("circ_pump1_hz", "Pump 1 Hz", "#9775fa"),
+            line("circ_pump2_hz", "Pump 2 Hz", "#3bc9db")]},
     ]
 
     prj = requests.get(f"{FUXA}/api/project", timeout=20).json()
