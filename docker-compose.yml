@@ -11,7 +11,8 @@ services:
     build: ./modbus-sim
     container_name: vf-modbus-sim
     ports:
-      - "5020:5020"     # exposed on host for debugging; VOLTTRON reaches it in-network
+      - "5020:5020"     # Modbus TCP (VOLTTRON reaches it in-network; host for debug)
+      - "5021:5021"     # scenario / fault-injection control API (MCP)
     restart: unless-stopped
 
   volttron:

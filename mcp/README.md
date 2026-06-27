@@ -44,8 +44,24 @@ when prompted. Then ask Claude things like *"what's the temperature trend?"* or
 | `list_devices` | devices and their points, grouped |
 | `platform_status` | agents, counts, data freshness, MCP config |
 
-*(Tiers 2–4 — build automation, commissioning tests, fault injection — added
-incrementally.)*
+### Tier 3 — commissioning / testing
+| Tool | Purpose |
+|---|---|
+| `write_and_verify(point, value, timeout_s, tolerance)` | write, then poll the live value until the full chain reflects it |
+| `checkout_point(point, test_values, timeout_s)` | round-trip a writable point through values, verify each, restore original |
+| `correlate(output_point, input_point, values, settle_s)` | ramp an output, record an input — check control linkages |
+
+### Tier 4 — scenario / fault injection
+| Tool | Purpose |
+|---|---|
+| `sim_state` | live sensor values + which sensors are pinned by faults |
+| `inject_fault(sensor, kind)` | `stuck`/`high`/`low`/`zero`/`clear` on a sensor; propagates through the whole stack |
+| `set_sim_point(sensor, value, hold)` | force a sensor to a value |
+| `load_scenario(name)` | `normal`, `overheat`, `sensor_failure`, `humidity_spike`, `frozen_plant` |
+| `reset_sim` | clear all faults; sensors resume wandering |
+
+*(Tier 2 — provisioning new VOLTTRON devices + generating FUXA dashboards — is
+the next addition.)*
 
 ## Write safety scaffold
 

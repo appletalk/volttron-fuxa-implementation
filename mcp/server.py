@@ -22,6 +22,7 @@ Safety scaffold (permissive by default; this is a simulator, not real hardware):
 
 import fnmatch
 import os
+import time
 
 import requests
 from mcp.server.fastmcp import FastMCP
@@ -43,6 +44,16 @@ mcp = FastMCP("volttron-fuxa")
 def _get(base, path, **params):
     r = requests.get(f"{base}{path}", params=params or None, timeout=HTTP_TIMEOUT)
     r.raise_for_status()
+    return r.json()
+
+
+def _post(base, path, payload):
+    r = requests.post(f"{base}{path}", json=payload, timeout=HTTP_TIMEOUT)
+    if r.status_code >= 400:
+        try:
+            return r.json()
+        except ValueError:
+            r.raise_for_status()
     return r.json()
 
 
@@ -133,6 +144,96 @@ def platform_status() -> dict:
         "write_allowlist": WRITE_ALLOWLIST or "all",
     }
     return status
+
+
+# --- Tier 3: commissioning / testing harness --------------------------------
+@mcp.tool()
+def write_and_verify(point: str, value: float, timeout_s: int = 15, tolerance: float = 0.0) -> dict:
+    """Write a point, then poll the LIVE value until it reflects the write — a
+    full-chain check (FUXA/MCP -> bridge -> VOLTTRON -> Modbus -> device -> back).
+
+    Returns ok=True with the observed value, or ok=False with reason 'timeout'.
+    """
+    res = write_point(point, value)
+    if res.get("blocked"):
+        return {"ok": False, **res}
+    deadline = time.time() + timeout_s
+    observed = None
+    while time.time() < deadline:
+        observed = read_point(point).get("value")
+        if observed is not None and abs(float(observed) - float(value)) <= tolerance:
+            return {"ok": True, "point": point, "target": value, "observed": observed}
+        time.sleep(1)
+    return {"ok": False, "point": point, "target": value, "observed": observed, "reason": "timeout"}
+
+
+@mcp.tool()
+def checkout_point(point: str, test_values: list[float] = None, timeout_s: int = 15) -> dict:
+    """Commission a writable point: round-trip it through several test values
+    (each verified full-chain), then restore the original value. Reports pass/fail."""
+    if not test_values:
+        test_values = [25, 50, 75]
+    original = read_point(point).get("value")
+    results = [write_and_verify(point, v, timeout_s) for v in test_values]
+    if original is not None:
+        write_point(point, original)
+    passed = sum(1 for r in results if r.get("ok"))
+    return {
+        "point": point, "passed": passed, "total": len(results),
+        "results": results, "restored_to": original,
+    }
+
+
+@mcp.tool()
+def correlate(output_point: str, input_point: str, values: list[float], settle_s: int = 6) -> dict:
+    """Ramp an output point across `values`; after each settle, record the input
+    point. Returns the (output, input) pairs so you can judge whether the input
+    responds. Useful for checking control linkages (e.g. pump speed -> flow)."""
+    pairs = []
+    for v in values:
+        write_point(output_point, v)
+        time.sleep(settle_s)
+        pairs.append({"output": v, "input": read_point(input_point).get("value")})
+    return {"output_point": output_point, "input_point": input_point, "pairs": pairs}
+
+
+# --- Tier 4: scenario / fault injection (digital-twin testing) --------------
+@mcp.tool()
+def sim_state() -> dict:
+    """Current simulator state: live sensor values, which sensors are pinned
+    (held to a fixed value by a fault), and the available named scenarios."""
+    return _get(SIM_URL, "/api/sim/state")
+
+
+@mcp.tool()
+def inject_fault(sensor: str, kind: str = "stuck") -> dict:
+    """Inject a fault into a wandering sensor so it propagates through VOLTTRON
+    to the bridge/FUXA (great for testing alarms and dashboards).
+
+    sensor: 'temperature' | 'humidity' | 'flow_rate'.
+    kind: 'stuck' (freeze at current), 'high', 'low', 'zero', or 'clear' (remove).
+    """
+    return _post(SIM_URL, "/api/sim/fault", {"name": sensor, "kind": kind})
+
+
+@mcp.tool()
+def set_sim_point(sensor: str, value: float, hold: bool = True) -> dict:
+    """Force a simulator sensor to a specific raw value (e.g. temperature 235 =
+    23.5 C). hold=True pins it (wander stops); hold=False sets it for one tick."""
+    return _post(SIM_URL, "/api/sim/point", {"name": sensor, "value": value, "hold": hold})
+
+
+@mcp.tool()
+def load_scenario(name: str) -> dict:
+    """Load a named simulator scenario (clears prior faults first). Options:
+    'normal', 'overheat', 'sensor_failure', 'humidity_spike', 'frozen_plant'."""
+    return _post(SIM_URL, "/api/sim/scenario", {"name": name})
+
+
+@mcp.tool()
+def reset_sim() -> dict:
+    """Clear all injected faults / holds; sensors resume normal wandering."""
+    return _post(SIM_URL, "/api/sim/reset", {})
 
 
 if __name__ == "__main__":
