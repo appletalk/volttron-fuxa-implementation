@@ -7,11 +7,21 @@ is built the **same way**, just with a richer process model and a more ambitious
 dashboard. The audience is an electrical engineer who builds power plants, so
 lean into the **electrical generation + grid** side as much as the thermal side.
 
-> This doc is self-contained, but three auto-memory files also persist across
+> This doc is self-contained, but four auto-memory files also persist across
 > context clears and carry the gory details: `project-state`, `mcp-server`,
-> `heat-station-poc`. Read `heat-station-poc` especially — it has the hard-won
-> FUXA format knowledge. This handoff recaps the essentials so you don't have to
-> re-derive anything.
+> `heat-station-poc`, `powerplant-next`. Read `heat-station-poc` especially — it
+> has the hard-won FUXA format knowledge. This handoff recaps the essentials so
+> you don't have to re-derive anything.
+
+> **Session shape:** open with an **`ultracode` design workflow** — fan out
+> parallel power-plant design proposals + research (real plant HMIs, credible
+> physics, the electrical details an EE will scrutinize, FUXA's gauge set) + a
+> realism review, then synthesize one strong spec. After that, **build
+> interactively** (normal session): the build/verify loop is serial, stateful,
+> single-live-stack and visually iterative — multi-agent can't parallelize it and
+> can't judge the aesthetics, so don't keep ultracode on for the build. Optionally
+> close with a quality/completeness review workflow. (Token cost is higher for the
+> workflow phases; they're worth it for the spec, not for the mechanical build.)
 
 ---
 
@@ -70,11 +80,11 @@ guard the agent installs) — it'll bite during iteration.
 
 | Concern | File | What to do for the power plant |
 |---|---|---|
-| Process model + control API | `modbus-sim/sim.py` | Replace the substation model with the power-plant model (see §4). Keep the aiohttp control API shape. |
-| VOLTTRON point map | `volttron/config/<device>.registry.csv` + `device.<device>.json` | New registry (one row per point) + device config. |
-| VOLTTRON wiring | `volttron/entrypoint.sh` | Point `vctl config store` at the new device + csv. |
-| FUXA dashboard generator | `mcp/build_dashboard.py` | The big one — generate device + tags + the schematic view. Reuse the widget helpers. (Consider `powerplant_dashboard.py` as a sibling.) |
-| MCP tools | `mcp/server.py` | Re-aim Tier-4 tools (`load_scenario`/`inject_fault`/`set_control`) at the plant's scenarios/faults/controls. |
+| Process model + control API | `modbus-sim/sim.py` | **Add** the power-plant `Plant` as a *second* slave alongside the substation (see §3b). Per-plant control API. |
+| VOLTTRON point map | `volttron/config/power_plant.registry.csv` + `device.power_plant.json` | New registry (one row per point) + device config, `slave_id: 2`. |
+| VOLTTRON wiring | `volttron/entrypoint.sh` | **Add** a second `vctl config store` for the power-plant device + csv (keep the substation one). |
+| FUXA dashboard generator | `mcp/build_dashboard.py` (+ `powerplant_dashboard.py`) | The big one — emit BOTH devices + BOTH views + combined charts in one project (§3b). Reuse the widget helpers. |
+| MCP tools | `mcp/server.py` | Add a `plant` arg to the scenario/fault/control tools (→ `/api/sim/<plant>/…`). |
 
 Rebuild images after editing: `docker compose build modbus-sim` / `build volttron`
 then `up -d --force-recreate <svc>`. The dashboard generator needs no rebuild
@@ -84,13 +94,13 @@ then `up -d --force-recreate <svc>`. The dashboard generator needs no rebuild
 
 ## 3. The recipe (copy the substation, change the domain)
 
-1. **Model** → rewrite `sim.py`'s `Plant` class: define `INPUTS` (read-only
-   measurements → Modbus *input* registers), `HOLDING` (writable
+1. **Model** → add a second `Plant`-style class in `sim.py` *alongside* the
+   substation (§3b — two slaves, don't delete the substation): define `INPUTS`
+   (read-only measurements → Modbus *input* registers), `HOLDING` (writable
    setpoints/commands → *holding* registers, with defaults), `DISCRETE`
    (alarm/status bits → *discrete inputs*). Implement `step()` (coupled physics,
    first-order lag toward targets, 1 Hz). Define `SCENARIOS` (named presets of
-   controls + faults). Keep the control endpoints identical so the MCP keeps
-   working.
+   controls + faults). Move the control endpoints to per-plant routes.
 2. **Registry** → one CSV row per point: `Volttron Point Name, Modbus Register,
    Writable, Point Address, Units, Notes`. Read-only analog = `>H`,`FALSE`;
    writable analog = `>H`,`TRUE`; bool = `BOOL`. The address is the register
@@ -109,6 +119,52 @@ MVAR, kV, Hz, rpm, t/h, %). Modbus registers are 16-bit ints and FUXA tag scalin
 is fiddly — avoid decimals. For values needing one decimal, store ×10 only if you
 *must*, and prefer a coarser unit (e.g. kPa not MPa, rpm not krpm). The
 substation proved integer-native reads cleanly everywhere.
+
+---
+
+## 3b. Run BOTH plants at once — two devices, two views (DO THIS)
+
+**Don't replace the substation — add the power plant alongside it.** One Docker
+stack hosts both, both stay live, and you switch between them in FUXA's nav. The
+substation also stays as a working reference. Changes vs §3:
+
+- **Sim** (`modbus-sim/sim.py`): run two `Plant` instances on two Modbus slaves —
+  `ModbusServerContext(slaves={1: substation_ctx, 2: powerplant_ctx})`. Step both
+  each 1 Hz tick. **Namespace the control API per plant:**
+  `POST /api/sim/<plant>/{scenario,fault,point,reset}` + `GET /api/sim/<plant>/state`
+  where `<plant>` ∈ {`heat_station`, `power_plant`}. (Refactor the current flat
+  `/api/sim/*` into this; update both the substation routes and the MCP.)
+- **VOLTTRON**: add a second device — `volttron/config/device.power_plant.json`
+  (`driver_config.slave_id: 2`, `registry_config: config://power_plant.csv`) +
+  `power_plant.registry.csv`, and a second `vctl config store … platform.driver
+  devices/campus/<site>/power_plant …` (+ the csv) line in `entrypoint.sh`. One
+  `platform.driver` agent serves both devices — both poll `modbus-sim:5020`,
+  distinguished by `slave_id`.
+- **FUXA**: ONE project with **two devices** (`heat_station`, `power_plant`) and
+  **two views**. `POST /api/project` is a *full replace*, so the generator must
+  emit *both* devices + *both* views + the combined `charts[]` in a single
+  project. Refactor `mcp/build_dashboard.py` into a shared assembler — e.g.
+  `build_project([heat_station_spec, power_plant_spec])` that returns
+  `{devices, views, charts}` and POSTs once — or keep `build_dashboard.py`
+  (substation) + add `powerplant_dashboard.py`, and a tiny top-level script that
+  merges their `(device, view, charts)` and POSTs. Use **stable view ids**
+  (`v_heat_station`, `v_power_plant`) so nav references don't break.
+- **MCP** (`mcp/server.py`): add a `plant` arg (default `"heat_station"`) to the
+  scenario/fault/control tools that selects the `/api/sim/<plant>/…` route.
+  read/write/history already work for either plant (points are addressed by full
+  path).
+
+**Switching between the two views — two mechanisms (do at least the button):**
+1. **On-dashboard nav button (recommended, explicit):** an `svg-ext-html_button`
+   whose event is `{type:"click", action:"onpage", actparam:"<targetViewId>"}`
+   jumps to that view. Put a "→ POWER PLANT" button on the substation view and a
+   "→ SUBSTATION" button on the plant view. (Action key string is `"onpage"`,
+   exactly like `"onSetValue"` — the enum key, not its `shapes.event-…` value.)
+2. **FUXA left-nav (hamburger) menu:** set
+   `project.hmi.layout.navigation.items = [{text, view:"<viewId>", link:"",
+   icon, image, permission:0}, …]` — one `NaviItem` per view (`view` = the view
+   id). Set `project.hmi.layout.start` to the home view. The hamburger then lists
+   both views.
 
 ---
 
