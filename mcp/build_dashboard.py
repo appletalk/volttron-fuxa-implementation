@@ -243,9 +243,15 @@ pipe(1000, 330, 1075, 330, HOT)
 pipe(1075, 330, 1075, 300, HOT)
 pipe(1075, 560, 1000, 560, COLD)
 
-# ---- Central trend (the live story): temperatures + flow ----
-text(366, 392, "REAL-TIME TREND · Heat Output", 12, "#9fd0ff", "start", "bold")
-chart(360, 400, 620, 150, CHART_ID)
+# ---- Makeup water system (centre, between the loops) ----
+text(440, 398, "MAKEUP WATER", 12, "#9fd0ff", "start", "bold")
+box(440, 408, 95, 112, "#0e2233", "#2f6f9c")
+progress(450, 418, 75, 92, "makeup_tank_level", 0, 100)
+text(487, 536, "Tank Level", 11, "#9aa", "middle")
+motor(645, 462, "makeup_pump_status", 22)
+text(645, 434, "MAKEUP PUMP", 11, "#9fd0ff", "middle")
+value(645, 506, "makeup_pump_hz", "Hz", 13, "#cfe9ff", "middle")
+pipe(535, 462, 625, 462, COLD)
 
 # ---- Secondary readouts panel (left) ----
 box(60, 360, 250, 210)
@@ -261,19 +267,9 @@ for i, (lab, p, u, c) in enumerate(labels):
     text(80, yy, lab, 12, "#9aa")
     value(290, yy, p, u, 15, c, "end")
 
-# ---- Makeup water system (bottom center) ----
-text(360, 610, "MAKEUP WATER", 13, "#9fd0ff", "start", "bold")
-box(360, 620, 120, 120, "#0e2233", "#2f6f9c")           # tank
-progress(370, 630, 100, 100, "makeup_tank_level", 0, 100)
-text(420, 758, "Tank Level", 11, "#9aa", "middle")
-motor(560, 690, "makeup_pump_status", 20)
-text(560, 662, "MAKEUP PUMP", 11, "#9fd0ff", "middle")
-value(560, 730, "makeup_pump_hz", "Hz", 12, "#cfe9ff", "middle")
-pipe(480, 690, 540, 690, COLD)
-
-# ---- Trend (bottom left): pressures & pump speed ----
-text(70, 610, "SECONDARY FLOW", 12, "#9fd0ff", "start", "bold")
-chart(60, 618, 290, 150, CHART2_ID)
+# ---- Real-time trend (bottom band, tall enough for a proper plot + y-axis) ----
+text(56, 594, "REAL-TIME TREND · Secondary Flow (m³/h)", 12, "#9fd0ff", "start", "bold")
+chart(50, 600, 600, 188, CHART_ID)
 
 # ---- Operator control panel (bottom) ----
 PX = 700
@@ -355,9 +351,7 @@ def main():
     # auto-ranges to its own data and plots reliably. Exact supply/return/pump
     # values are all in the readout panel; these trends show the moving picture.
     charts = [
-        {"id": CHART_ID, "name": "Heat Output (GJ/h)", "type": "realtime1", "lines": [
-            line("instant_heat", "Heat GJ/h", "#ffd479")]},
-        {"id": CHART2_ID, "name": "Secondary Flow (m³/h)", "type": "realtime1", "lines": [
+        {"id": CHART_ID, "name": "Secondary Flow (m³/h)", "type": "realtime1", "lines": [
             line("secondary_flow", "Flow m³/h", "#51cf66")]},
     ]
 
