@@ -273,13 +273,27 @@ signature demo and capture it.
   daq:{enabled:false,…}}}}`. Tags keyed by `tag.id`. **Keep `daq.enabled=false`**
   for chart tags (DAQ-on makes realtime charts mix in 8h of UTC historian data →
   wrong-looking x-axis).
-- **FUXA realtime chart is finicky** (v1.3.3): use **one line per chart** (flat
-  multi-line series get pruned when uPlot's y-range collapses; you can't pin
-  `scales.y` — FUXA overwrites it). Kill uPlot's idle-cursor legend (epoch-0
-  "1969" time row + "--" values) by injecting CSS in the svgcontent:
-  `<style>.u-legend .u-series:first-child{display:none!important}
-  .u-legend .u-value{display:none!important}</style>`. The legend label uses the
-  line's `label`. Exact numbers belong in readout tiles, not the chart.
+- **FUXA realtime chart (v1.3.3) — the knobs that make it work well:**
+  - **PIN the y-axis range** via the chart `property.options`:
+    `scaleY1min/scaleY1max` (left axis), `scaleY2min/scaleY2max` (right axis).
+    FUXA reads these into uPlot's scales. This is essential — it gives **defined,
+    labelled axes** AND stops uPlot's auto-range from collapsing on flat data,
+    which is what otherwise **prunes multi-line series**. (Without pinning the
+    line clips off the top and the y-scale won't render.)
+  - **Multi-line / dual-axis works** once pinned: set each line's `yaxis` (1 =
+    left, 2 = right). Lines with `yaxis>1` plot against scale 2 and FUXA prefixes
+    the legend label with `Y1 -`/`Y2 -`. e.g. supply/return temp on Y1, flow on
+    Y2 in one chart.
+  - **Make the chart tall** (~180px+). uPlot's title + x-axis + legend eat a
+    short chart, leaving no plot area (line clips). Put trends in a bottom band
+    with real height, not a 150px slot.
+  - **Kill the idle-cursor legend junk** (epoch-0 "1969" time row + "--" values)
+    by injecting CSS in the svgcontent:
+    `<style>.u-legend .u-series:first-child{display:none!important}
+    .u-legend .u-value{display:none!important}</style>`. Legend label = line's
+    `label`.
+  - Keep `daq.enabled=false` on chart tags (DAQ pulls 8h of UTC history → wrong
+    x-axis). Exact instantaneous numbers still belong in readout tiles.
 - Server resolves a tag by searching all devices' `getTagProperty(tagId)`; the
   Volttron connector keys `data.tags` by `tag.id`. Writes go via socket
   `device-values` `{cmd:'set', var:{source:deviceId, id:tagId, value}}` — the MCP
