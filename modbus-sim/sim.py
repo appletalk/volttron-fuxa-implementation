@@ -496,7 +496,7 @@ class SolarPlant:
         # enters the live day model; the rate (0 pause / 1 play / N fast) advances
         # the day clock continuously across a full 24 h (night included).
         ts = h["time_set_hhmm"]
-        if 0 <= ts <= 2359:
+        if 0 <= ts <= 2359 and ts % 100 < 60:    # valid HHMM (reject e.g. 1099)
             target_min = (ts // 100) * 60 + (ts % 100)
             self.day_t = clamp(T_DAY * target_min / 1440.0, 0.0, T_DAY)
             self.mode = "day_in_the_life"
@@ -597,7 +597,7 @@ class SolarPlant:
             firm_target = min(s["P_ref"], h["power_setpoint_mw"], P_ac_cap_now)
             P_dc_needed = firm_target / ETA_INV
             P_batt_dc = clamp(P_dc_needed - P_dc_pv, -P_BATT_MAX, P_BATT_MAX)
-            # SOC state-of-charge management: in daylight, gently bias toward 50 %
+            # SOC state-of-charge management: in daylight, gently bias toward ~55 %
             # (charge if low / discharge if high) so SOC cycles in a healthy band
             # day-to-day instead of drifting to a rail from sunset firming.
             if P_dc_pv > 5.0:
@@ -651,7 +651,8 @@ class SolarPlant:
         s["plant_active_power_mw"] = lag(s["plant_active_power_mw"], P_plant, 0.2)
         curtailing = (s["clipping_loss_mw"] > 0.5) and \
             (soc >= SOC_HI or h["power_setpoint_mw"] < P_ac_pv_unclipped)
-        s["daily_energy_mwh"] += s["plant_active_power_mw"] * DT * SOC_TC / 3600.0
+        if self.mode == "day_in_the_life":   # "daily" energy only accrues over the simulated day
+            s["daily_energy_mwh"] += s["plant_active_power_mw"] * DT * SOC_TC / 3600.0
 
         # (8b) campus microgrid: the solar+BESS plant supplies a campus bus; the
         # district-heating substation's circulation pumps are an electrical load on
@@ -660,7 +661,7 @@ class SolarPlant:
         hour = self._time_minutes() / 60.0
         shape = clamp(math.sin(math.pi * (hour - 5.5) / 13.0), 0.0, 1.0)
         base = 10.0 + 18.0 * shape                    # campus base load: 10 MW night .. 28 MW midday
-        sl1 = self.ctx[1]
+        sl1 = self.ctx[1]   # substation's last-written pump Hz (1-tick lag at worst, fine)
         hz1 = sl1.getValues(FC_INPUT, INPUTS["circ_pump1_hz"], count=1)[0]
         hz2 = sl1.getValues(FC_INPUT, INPUTS["circ_pump2_hz"], count=1)[0]
         hzm = sl1.getValues(FC_INPUT, INPUTS["makeup_pump_hz"], count=1)[0]
@@ -679,13 +680,18 @@ class SolarPlant:
             Q_limit = min(Q_MAX, math.sqrt(max(0.0, S_MAX ** 2 - Pp ** 2)))
             Q = clamp(h["mvar_setpoint"], -Q_limit, Q_limit)
             s["plant_reactive_power_mvar"] = lag(s["plant_reactive_power_mvar"], Q, 0.2)
-            Vkv = V_NOM + KV_PER_MVAR * s["plant_reactive_power_mvar"] + v_off
+            # operator voltage-control setpoint sets the POI base voltage (default
+            # 115 kV = nominal); reactive dispatch deviates POI voltage around it.
+            Vkv = h["voltage_setpoint_kv"] + KV_PER_MVAR * s["plant_reactive_power_mvar"] + v_off
             s["poi_voltage_kv"] = lag(s["poi_voltage_kv"], Vkv, 0.2)
             S = math.sqrt(Pp ** 2 + s["plant_reactive_power_mvar"] ** 2)
             s["power_factor"] = 1.0 if S < 0.5 else Pp / S
             s["poi_current_a"] = S * 1e6 / (SQRT3 * s["poi_voltage_kv"] * 1000.0) \
                 if s["poi_voltage_kv"] > 1.0 else 0.0
-            s["performance_ratio_pct"] = 100.0 * s["inverter_ac_power_mw"] / max((G / 1000.0) * P_DC_STC, 1.0)
+            # PR is a PV-ARRAY metric -> use PV-only AC (exclude BESS discharge,
+            # which shares the inverters), else dispatch/sunset-lag reads a false 100%.
+            pv_only_ac = min(P_dc_pv * ETA_INV, P_AC_RATED * (n_ok / N_INV))
+            s["performance_ratio_pct"] = 100.0 * pv_only_ac / max((G / 1000.0) * P_DC_STC, 1.0)
         else:
             s["plant_reactive_power_mvar"] = lag(s["plant_reactive_power_mvar"], 0.0, 0.3)
             s["poi_voltage_kv"] = lag(s["poi_voltage_kv"], V_NOM + v_off, 0.2)
