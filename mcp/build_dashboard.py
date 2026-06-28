@@ -207,7 +207,7 @@ def pipe(x1, y1, x2, y2, color="#2b7fb8", sw=6):
 # LAYOUT  (canvas 1280 x 800, dark theme)
 # ===========================================================================
 add('<rect x="0" y="0" width="1280" height="800" fill="#0a1622"/>')
-text(640, 34, "HEAT EXCHANGE STATION — MONITORING", 22, "#5fd0ff", "middle", "bold")
+text(420, 34, "HEAT EXCHANGE STATION", 22, "#5fd0ff", "middle", "bold")
 add('<line x1="40" y1="48" x2="1240" y2="48" stroke="#1f4257" stroke-width="1"/>')
 
 HOT, COLD, PIPE = "#e0533a", "#2b7fb8", "#2b7fb8"

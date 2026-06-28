@@ -197,46 +197,96 @@ def correlate(output_point: str, input_point: str, values: list[float], settle_s
     return {"output_point": output_point, "input_point": input_point, "pairs": pairs}
 
 
-# --- Tier 4: scenario / fault injection (heating-substation digital twin) ----
-@mcp.tool()
-def sim_state() -> dict:
-    """Full simulator state: live measurements, operator controls (setpoints/
-    commands), alarm bits, active faults, and the available named scenarios."""
-    return _get(SIM_URL, "/api/sim/state")
+# --- Tier 4: scenario / fault injection (two coupled digital twins) ----------
+# The sim hosts two plants on a per-plant control API
+# (POST /api/sim/<plant>/{scenario,fault,point,reset}, GET .../state):
+#   heat_station  district-heating substation (Modbus slave 1)  [default]
+#   power_plant   "Sunfield Solar" 100 MWac PV + DC-coupled BESS (slave 2)
+PLANTS = ("heat_station", "power_plant")
+
+
+def _plant_path(plant, leaf):
+    return f"/api/sim/{plant}/{leaf}" if plant in PLANTS else None
 
 
 @mcp.tool()
-def inject_fault(component: str, on: bool = True) -> dict:
-    """Inject (or clear) a plant fault; it cascades through VOLTTRON -> bridge ->
-    FUXA so the dashboard reacts (pump turns red, alarm fires, flow/heat drop).
+def sim_state(plant: str = "heat_station") -> dict:
+    """Full simulator state for a plant: live measurements, operator controls,
+    alarm bits, active faults, and the available named scenarios.
 
-    component: 'circ_pump1' | 'circ_pump2' | 'makeup_pump' | 'primary'
-               (primary = loss of the city heat main).
+    plant: 'heat_station' (district-heating substation) or 'power_plant'
+           (Sunfield Solar 100 MWac PV + BESS).
+    """
+    path = _plant_path(plant, "state")
+    if not path:
+        return {"error": f"unknown plant '{plant}'", "plants": list(PLANTS)}
+    return _get(SIM_URL, path)
+
+
+@mcp.tool()
+def inject_fault(component: str, on: bool = True, plant: str = "heat_station") -> dict:
+    """Inject (or clear) a plant fault; it cascades VOLTTRON -> bridge -> FUXA so
+    the dashboard reacts.
+
+    plant='heat_station' faults: 'circ_pump1' | 'circ_pump2' | 'makeup_pump' |
+        'primary' (loss of the city heat main).
+    plant='power_plant' faults: 'inverter1'..'inverter4' (trip a block -> AC cap
+        drops 25 MW + alarm), 'grid_under_freq' (under-frequency ride-through
+        indication, no trip), 'grid_severe' (sustained excursion -> breaker
+        trips, export -> 0), 'dc_ground_fault', 'comms_loss', 'battery_over_temp'.
     on: True to fault, False to clear.
     """
-    return _post(SIM_URL, "/api/sim/fault", {"name": component, "on": on})
+    path = _plant_path(plant, "fault")
+    if not path:
+        return {"error": f"unknown plant '{plant}'", "plants": list(PLANTS)}
+    return _post(SIM_URL, path, {"name": component, "on": on})
 
 
 @mcp.tool()
-def set_control(name: str, value: float) -> dict:
-    """Set an operator control / setpoint on the plant (also writable from the
-    FUXA buttons). Names: circ_pump1_cmd, circ_pump1_hz_sp, circ_pump2_cmd,
-    circ_pump2_hz_sp, makeup_pump_cmd, supply_setpoint, building_load."""
-    return _post(SIM_URL, "/api/sim/point", {"name": name, "value": value})
+def set_sim_point(name: str, value: float, plant: str = "heat_station") -> dict:
+    """Set an operator control / setpoint on a plant (also writable from the FUXA
+    buttons). Values are RAW register values (offsets baked in).
+
+    plant='heat_station': circ_pump1_cmd, circ_pump1_hz_sp, circ_pump2_cmd,
+        circ_pump2_hz_sp, makeup_pump_cmd, supply_setpoint, building_load.
+    plant='power_plant': power_setpoint_mw, mvar_setpoint (+50 offset; 50=0 MVAR),
+        voltage_setpoint_kv (x10), bess_mode (0 auto / 1 force-charge /
+        2 force-discharge), bess_power_cmd_mw (+50 offset; 75=+25 MW),
+        breaker_cmd (0 open / 1 close), tracker_enable (0 stow / 1 track).
+    """
+    path = _plant_path(plant, "point")
+    if not path:
+        return {"error": f"unknown plant '{plant}'", "plants": list(PLANTS)}
+    return _post(SIM_URL, path, {"name": name, "value": value})
 
 
 @mcp.tool()
-def load_scenario(name: str) -> dict:
-    """Load a named plant scenario (clears prior faults first). Options:
-    'normal', 'morning_startup', 'peak_load', 'circ_pump_trip',
-    'makeup_vfd_fault', 'loss_of_primary'."""
-    return _post(SIM_URL, "/api/sim/scenario", {"name": name})
+def load_scenario(name: str, plant: str = "heat_station") -> dict:
+    """Load a named plant scenario (clears prior faults first).
+
+    plant='heat_station': 'normal', 'morning_startup', 'peak_load',
+        'circ_pump_trip', 'makeup_vfd_fault', 'loss_of_primary'.
+    plant='power_plant': 'normal', 'day_in_the_life' (signature day: sunrise ->
+        peak with AC clipping -> passing cloud the battery firms -> evening),
+        'sunrise', 'peak_sun', 'cloud_passing', 'curtailment', 'evening',
+        'inverter_trip', 'grid_fault', 'bess_dispatch', 'low_soc'.
+    """
+    path = _plant_path(plant, "scenario")
+    if not path:
+        return {"error": f"unknown plant '{plant}'", "plants": list(PLANTS)}
+    return _post(SIM_URL, path, {"name": name})
 
 
 @mcp.tool()
-def reset_sim() -> dict:
-    """Reset the plant to the 'normal' operating scenario (clears all faults)."""
-    return _post(SIM_URL, "/api/sim/reset", {})
+def reset_sim(plant: str = "heat_station") -> dict:
+    """Reset a plant to its 'normal' operating scenario (clears all faults).
+
+    plant: 'heat_station' or 'power_plant'.
+    """
+    path = _plant_path(plant, "reset")
+    if not path:
+        return {"error": f"unknown plant '{plant}'", "plants": list(PLANTS)}
+    return _post(SIM_URL, path, {})
 
 
 if __name__ == "__main__":

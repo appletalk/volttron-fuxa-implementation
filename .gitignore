@@ -11,3 +11,4 @@ venv/
 
 # Playwright MCP scratch snapshots
 .playwright-mcp/
+pp-*.png

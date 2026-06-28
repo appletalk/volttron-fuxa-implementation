@@ -43,6 +43,10 @@ vctl config store platform.driver config "$CFG/platform-driver.config"
 vctl config store platform.driver devices/campus/building/heat_station "$CFG/device.heat_station.json"
 vctl config store platform.driver heat_station.csv "$CFG/heat_station.registry.csv" --csv
 
+log "storing solar power-plant Modbus device (slave 2)"
+vctl config store platform.driver devices/campus/solar/power_plant "$CFG/device.power_plant.json"
+vctl config store platform.driver power_plant.csv "$CFG/power_plant.registry.csv" --csv
+
 # --- 4. install + (re)start the agents ---------------------------------------
 # Install by BARE package name (no ==version): VOLTTRON records the whole
 # install string as the package id and later looks up its metadata by that
@@ -53,15 +57,26 @@ vctl config store platform.driver heat_station.csv "$CFG/heat_station.registry.c
 # the pre-installed 0.2.1rc2 / 0.2.1rc1 are kept. Do NOT add --force here: it
 # maps to pip --force-reinstall, which re-resolves to the latest 2.0 line and
 # breaks the Modbus driver's base-driver pin.
-log "installing platform.driver"
-vctl install volttron-platform-driver \
-    --vip-identity platform.driver --start
+# Idempotent installs: on a container RESTART the writable layer (and thus
+# VOLTTRON_HOME) persists, so a fresh `vctl install` fails with "Identity already
+# exists, but not forced!" and -e would loop the container. So: if the identity
+# is already installed, start it by its UUID (vctl start takes a UUID, NOT an
+# identity); otherwise install + start fresh.
+ensure_agent() {
+    local identity="$1" pkg="$2"; shift 2
+    local uuid
+    uuid=$(vctl status 2>/dev/null | awk -v id="$identity" 'index($0, id) {print $1; exit}')
+    if [ -n "$uuid" ]; then
+        log "$identity present (uuid $uuid); starting"
+        vctl start "$uuid" || true
+    else
+        log "installing $identity"
+        vctl install "$pkg" --vip-identity "$identity" "$@" --start
+    fi
+}
 
-log "installing platform.historian (sqlite)"
-vctl install volttron-sqlite-historian \
-    --vip-identity platform.historian \
-    --agent-config "$CFG/historian.config" \
-    --start
+ensure_agent platform.driver volttron-platform-driver
+ensure_agent platform.historian volttron-sqlite-historian --agent-config "$CFG/historian.config"
 
 sleep 3
 log "agent status:"
