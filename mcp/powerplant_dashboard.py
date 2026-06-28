@@ -250,11 +250,6 @@ class View:
         self.value(cx + 6, y, "clock_min_tens", "", fs, color, "start")
         self.value(cx + 6 + d, y, "clock_min_ones", "", fs, color, "start")
 
-    def kpi(self, x, y, w, label, p, units, color):
-        self.box(x, y, w, 78, "#0e2030", "#21506e", 1.5, 8)
-        self.text(x + w / 2, y + 21, label, 10, SUB, "middle", "bold")
-        self.value(x + w / 2, y + 56, p, units, 26, color, "middle")
-
     # --- electrical symbol shorthands (proceng, status-recolored) -----------
     INV_RANGES = [{"type": "range", "min": "1", "max": "1", "color": GREEN},
                   {"type": "range", "min": "2", "max": "2", "color": RED},

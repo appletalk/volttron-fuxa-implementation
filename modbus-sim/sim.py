@@ -364,16 +364,18 @@ PV_SCENARIOS = {
     "day_in_the_life": {"holding": {"power_setpoint_mw": 100, "mvar_setpoint": 50,
                                     "bess_mode": 0, "breaker_cmd": 1, "tracker_enable": 1,
                                     "time_rate": 1}, "faults": {}},
-    "sunrise": {"holding": {"power_setpoint_mw": 100, "bess_mode": 0,
-                            "breaker_cmd": 1, "tracker_enable": 1}, "faults": {}},
+    # sunrise / evening are the 24 h day started at dawn / late-afternoon (they
+    # share the day_in_the_life model -- see apply_scenario), so they play.
+    "sunrise": {"holding": {"power_setpoint_mw": 100, "bess_mode": 0, "breaker_cmd": 1,
+                            "tracker_enable": 1, "time_rate": 1}, "faults": {}},
+    "evening": {"holding": {"power_setpoint_mw": 100, "bess_mode": 0, "breaker_cmd": 1,
+                            "tracker_enable": 1, "time_rate": 1}, "faults": {}},
     "peak_sun": {"holding": {"power_setpoint_mw": 100, "bess_mode": 0,
                              "breaker_cmd": 1}, "faults": {}},
     "cloud_passing": {"holding": {"power_setpoint_mw": 100, "bess_mode": 0,
                                   "breaker_cmd": 1}, "faults": {}},
     "curtailment": {"holding": {"power_setpoint_mw": 60, "bess_mode": 0,
                                 "breaker_cmd": 1}, "faults": {}},
-    "evening": {"holding": {"power_setpoint_mw": 100, "bess_mode": 0,
-                            "breaker_cmd": 1, "tracker_enable": 1}, "faults": {}},
     "inverter_trip": {"holding": {"power_setpoint_mw": 100, "bess_mode": 0,
                                   "breaker_cmd": 1}, "faults": {"inverter2": True}},
     "grid_fault": {"holding": {"breaker_cmd": 1}, "faults": {"grid_under_freq": True}},
@@ -428,17 +430,13 @@ class SolarPlant:
         self._slave().setValues(FC_HOLDING, PV_HOLDING[name][0], [int(value)])
 
     # --- local time of day (minutes since midnight) -------------------------
-    # day_in_the_life maps its day clock onto a real daylight arc (05:30 -> 18:30);
-    # the ramp scenarios advance within that window; steady scenarios sit at a
-    # representative hour so "time of day" always reads sensibly on the dashboard.
+    # day_in_the_life (incl. the sunrise/evening start presets) advances a full
+    # 24 h clock; the steady scenarios sit at a representative hour so the
+    # dashboard clock always reads sensibly.
     def _time_minutes(self):
-        m, t = self.mode, self.clock
+        m = self.mode
         if m == "day_in_the_life":
             return (self.day_t / T_DAY) * 1440.0                     # full 24 h: 00:00 -> 24:00
-        if m == "sunrise":
-            return 330.0 + clamp(t / 90.0, 0.0, 1.4) * 120.0         # 05:30 -> ~07:30
-        if m == "evening":
-            return 1020.0 + clamp(t / 120.0, 0.0, 1.0) * 90.0        # 17:00 -> 18:30
         if m == "peak_sun":
             return 720.0                                             # 12:00
         if m == "curtailment":
@@ -466,14 +464,6 @@ class SolarPlant:
                 G = min(G, 720.0)
             T_amb = 19.0 + 14.0 * day                   # ~19 degC overnight, ~33 midday
             return G, T_amb, angle
-        if m == "sunrise":
-            G = clamp((t / 90.0) * 1000.0, 0.0, 1000.0)
-            angle = clamp(-60.0 + (t / 90.0) * 60.0, -60.0, 0.0)
-            return G, 24.0 + 4.0 * clamp(t / 180.0, 0.0, 1.0), angle
-        if m == "evening":
-            G = clamp(1000.0 * (1.0 - t / 120.0), 0.0, 1000.0)
-            angle = clamp((t / 120.0) * 60.0, 0.0, 60.0)
-            return G, 30.0 - 6.0 * clamp(t / 120.0, 0.0, 1.0), angle
         if m in ("peak_sun", "curtailment"):
             return 1050.0, 33.0, 0.0
         if m in ("cloud_passing", "low_soc"):    # deep dip 1000->300->1000 over ~38s
@@ -786,11 +776,11 @@ class SolarPlant:
                 "scenarios": list(PV_SCENARIOS)}
 
     def _seed_from_driver(self):
-        """Warm-start the lagged environment + slow baseline to a consistent
-        steady state for the scenario's t=0 conditions, so scenarios that begin
-        at full sun (peak_sun etc.) pin the clip immediately instead of waiting
-        out the EMA convergence, while ramp scenarios (sunrise/evening/day) that
-        start at G=0 still ramp up naturally."""
+        """Warm-start the lagged environment + firming envelope to a consistent
+        steady state for the current time/scenario, so scenarios that begin at
+        full sun (peak_sun etc.) -- and time jumps -- pin the clip immediately
+        instead of waiting out the envelope convergence, while times at G=0
+        (dawn/night) snap dark."""
         G0, T0, ang0 = self._driver_targets()
         track = self._read_h_raw("tracker_enable")
         brk = self._read_h_raw("breaker_cmd")
@@ -819,11 +809,14 @@ class SolarPlant:
         self.trip_latched = False
         self.uf_clock = 0.0
         self.s["daily_energy_mwh"] = 0.0
-        if name == "sunrise":
-            self.day_t = 0.0
-        if name == "day_in_the_life":       # open at dawn (05:30) and run the full 24 h from there;
-            self.day_t = T_DAY * 330.0 / 1440.0   # known mid-charge SOC so the day is repeatable
-            self.s["battery_soc_pct"] = 45.0
+        # sunrise / evening / day_in_the_life are one 24 h day model started at a
+        # different hour (a jump-to-time), so they share the mode + run the full day.
+        if name in ("sunrise", "evening", "day_in_the_life"):
+            self.mode = "day_in_the_life"
+            self.day_t = T_DAY * {"sunrise": 300.0, "evening": 990.0,
+                                  "day_in_the_life": 330.0}[name] / 1440.0
+            if name == "day_in_the_life":   # signature day: known mid-charge SOC for repeatability
+                self.s["battery_soc_pct"] = 45.0
         if name == "low_soc":               # pre-drained below the floor: discharge blocks,
             self.s["battery_soc_pct"] = 9.0     # so the next cloud sags export (negative-space proof)
         self._seed_from_driver()
