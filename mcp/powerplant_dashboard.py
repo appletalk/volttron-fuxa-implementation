@@ -224,7 +224,10 @@ class View:
 
     def chart(self, x, y, w, h, chart_id, y1=None, y2=None):
         gid = uid("HXC")                # host div must start 'D-HXC_' (FUXA prefixD)
-        opts = {"legend": {"live": False}}
+        # legendMode "bottom" = bottom legend ON, floating cursor TOOLTIP OFF (its
+        # box clips to ~2 lines so the other series overflow it). The bottom legend
+        # still updates with each series' value on hover.
+        opts = {"legendMode": "bottom"}
         if y1:
             opts["scaleY1min"], opts["scaleY1max"] = y1
         if y2:
@@ -330,9 +333,14 @@ class View:
             self.text(x + w / 2, y + h + 14, label, 10, SUB, "middle", "bold")
 
     # --- assemble ------------------------------------------------------------
-    LEGEND_CSS = ('<style>.u-legend .u-series:first-child{display:none !important;}'
-                  '.u-legend .u-value{display:none !important;}'
-                  '.u-legend{color:#1b2a36;font-size:11px;}</style>')
+    # Hide the redundant uPlot title (we draw our own bold label above each chart)
+    # to free vertical space so the legend isn't crammed at the clipped bottom
+    # edge; hide only the idle x-axis "1969" row; KEEP the value cells so hovering
+    # shows each series' value at the cursor.
+    LEGEND_CSS = ('<style>.u-title{display:none !important;}'
+                  '.u-legend .u-series:first-child{display:none !important;}'
+                  '.u-legend{color:#1b2a36;font-size:12px;}'
+                  '.u-legend .u-value{font-weight:600;margin-left:2px;}</style>')
 
     def svgcontent(self):
         return ('<svg width="{w}" height="{h}" xmlns="http://www.w3.org/2000/svg" '
@@ -427,26 +435,21 @@ def build_site():
     v.nav(1024, yb - 64, 64, 22, "OPEN ▶", "v_heat_station")
     v.nav(1024, yb + 18, 64, 22, "OPEN ▶", "v_power_plant")
 
-    # --- trend: generation vs campus load (+ grid exchange) ---
-    v.text(28, 512, "GENERATION vs CAMPUS LOAD  ·  surplus exported / deficit imported", 12, "#9fd0ff", "start", "bold")
-    v.chart(24, 520, 700, 156, C_CAMPUS, y1=(0, 110), y2=(0, 200))
-
-    # --- summary tiles (both plants, dual-device binding) ---
-    v.box(740, 512, 512, 164, PANEL, EDGE, 1.5, 8)
-    v.text(758, 536, "SOLAR PLANT", 12, "#ffd479", "start", "bold")
-    for i, (lab, p, u) in enumerate([("Plant MW", "plant_active_power_mw", "MW"),
-                                     ("Irradiance", "irradiance_wm2", "W/m²"),
-                                     ("BESS SOC", "battery_soc_pct", "%")]):
-        yy = 562 + i * 32
-        v.text(758, yy, lab, 11, SUB, "start")
-        v.value(980, yy, p, u, 15, INK, "end")
-    v.text(1010, 536, "DISTRICT HEATING", 12, "#c79bff", "start", "bold")
-    for i, (lab, p, u) in enumerate([("Heat Output", "instant_heat", "GJ/h"),
-                                     ("Loop Flow", "secondary_flow", "m³/h"),
-                                     ("Supply Temp", "secondary_supply_temp", "°C")]):
-        yy = 562 + i * 32
-        v.text(1010, yy, lab, 11, SUB, "start")
-        v.value(1232, yy, p, u, 15, INK, "end", src="hs")
+    # --- compact summary strip (both plants, dual-device) ---
+    tiles = [("SOLAR GEN", "plant_active_power_mw", "MW", GREEN, None),
+             ("BESS SOC", "battery_soc_pct", "%", INK, None),
+             ("IRRADIANCE", "irradiance_wm2", "W/m²", GOLD, None),
+             ("HEAT OUTPUT", "instant_heat", "GJ/h", "#ff9a6a", "hs"),
+             ("LOOP FLOW", "secondary_flow", "m³/h", "#7CE0A0", "hs"),
+             ("SUPPLY TEMP", "secondary_supply_temp", "°C", "#ff9a6a", "hs")]
+    for i, (lab, p, u, c, src) in enumerate(tiles):
+        x = 24 + i * 206
+        v.box(x, 497, 196, 52, "#0e2030", "#21506e", 1.2, 6)
+        v.text(x + 14, 516, lab, 10, SUB, "start", "bold")
+        v.value(x + 182, 538, p, u, 17, c, "end", src=src)
+    # --- big full-width trend: generation vs campus load (+ grid exchange) ---
+    v.text(28, 568, "GENERATION vs CAMPUS LOAD  ·  surplus exported / deficit imported", 12, "#9fd0ff", "start", "bold")
+    v.chart(24, 576, 1228, 212, C_CAMPUS, y1=(0, 110), y2=(0, 200))
     return v
 
 
@@ -577,14 +580,14 @@ def build_overview():
         v.text(ax + 30, yy, lab, 10, INK, "start")
 
     # --- signature trends (bottom) ---
-    v.text(28, 470, "PLANT MW vs IRRADIANCE  (DC climbs · AC clips flat at 100)", 11, "#9fd0ff", "start", "bold")
-    v.chart(24, 478, 510, 162, C_MWIRR, y1=(0, 120), y2=(0, 1200))
-    v.text(556, 470, "BESS FIRMING  ·  SOC (%) & Battery Power (MW +50)", 11, "#9fd0ff", "start", "bold")
-    v.chart(552, 478, 500, 162, C_FIRM, y1=(0, 100), y2=(25, 75))
+    v.text(28, 460, "PLANT MW vs IRRADIANCE  (DC climbs · AC clips flat at 100)", 11, "#9fd0ff", "start", "bold")
+    v.chart(24, 468, 510, 202, C_MWIRR, y1=(0, 120), y2=(0, 1200))
+    v.text(556, 460, "BESS FIRMING  ·  SOC (%) & Battery Power (MW +50)", 11, "#9fd0ff", "start", "bold")
+    v.chart(552, 468, 500, 202, C_FIRM, y1=(0, 100), y2=(25, 75))
 
     # --- operator presets (bottom strip) ---
-    py = 652
-    v.box(24, py, 1028, 120, PANEL, EDGE, 1.5, 8)
+    py = 672
+    v.box(24, py, 1028, 118, PANEL, EDGE, 1.5, 8)
     v.text(40, py + 22, "OPERATOR CONTROLS", 12, "#9fd0ff", "start", "bold")
     v.text(40, py + 50, "Export Setpoint", 11, INK, "start")
     for i, val in enumerate((40, 60, 80, 100)):
@@ -678,11 +681,11 @@ def build_oneline():
 
     # PQ-envelope chart
     v.text(648, 376, "PQ ENVELOPE  ·  POI Voltage & Reactive", 11, "#9fd0ff", "start", "bold")
-    v.chart(644, 384, 608, 164, C_PQ, y1=(1090, 1210), y2=(17, 83))
+    v.chart(644, 384, 608, 202, C_PQ, y1=(1090, 1210), y2=(17, 83))
 
     # controls + alarms
-    py = 562
-    v.box(28, py, 600, 210, PANEL, EDGE, 1.5, 8)
+    py = 596
+    v.box(28, py, 600, 194, PANEL, EDGE, 1.5, 8)
     v.text(44, py + 24, "DISPATCH CONTROLS", 12, "#9fd0ff", "start", "bold")
     v.text(44, py + 54, "Export MW", 11, INK, "start")
     for i, val in enumerate((40, 60, 80, 100)):
@@ -702,7 +705,7 @@ def build_oneline():
     v.text(330, py + 162, "Grid Hz (x10)", 11, SUB, "start")
     v.value(470, py + 163, "grid_frequency_hz", "", 15, INK, "start")
 
-    v.box(644, py, 608, 210, "#1a0f12", "#5a2230", 1.5, 8)
+    v.box(644, py, 608, 194, "#1a0f12", "#5a2230", 1.5, 8)
     v.text(660, py + 24, "PROTECTION & ALARMS", 12, "#ff8a8a", "start", "bold")
     pal = [("Breaker Trip", "breaker_trip"), ("Grid Over-Voltage", "grid_over_voltage"),
            ("Grid Under-Freq", "grid_under_frequency"), ("Inverter Fault", "inverter_fault"),
@@ -761,8 +764,8 @@ def build_bess():
         v.value(858 + 197, y + 74, p, u, 30, c, "middle")
 
     # SOC vs power trend
-    v.text(28, 462, "SOC vs BATTERY POWER  ·  charges from the clip, discharges into a cloud", 12, "#9fd0ff", "start", "bold")
-    v.chart(24, 470, 1228, 200, C_SOC, y1=(0, 100), y2=(25, 75))
+    v.text(28, 436, "SOC vs BATTERY POWER  ·  charges from the clip, discharges into a cloud", 12, "#9fd0ff", "start", "bold")
+    v.chart(24, 444, 1228, 234, C_SOC, y1=(0, 100), y2=(25, 75))
 
     # dispatch controls
     py = 686
