@@ -163,7 +163,10 @@ def chart(x, y, w, h, chart_id, y1=None, y2=None):
     #  (b) stops uPlot's auto-range from collapsing on flat data (which was
     #      pruning multi-line series). legend.live=false -> static legend.
     # y1/y2 are (min, max) tuples.
-    opts = {"legend": {"live": False}}
+    # legendMode "bottom": bottom legend ON, floating cursor tooltip OFF (its box
+    # clips to ~2 lines so other series overflow it). Legend still shows each
+    # series' value on hover.
+    opts = {"legendMode": "bottom"}
     if y1:
         opts["scaleY1min"], opts["scaleY1max"] = y1
     if y2:
@@ -341,9 +344,12 @@ def main():
     # when the cursor isn't hovering, and FUXA doesn't pass legend options through.
     # Hide the time row + value cells via CSS, leaving just the colored series
     # labels. (Applies document-wide to the HTML legend inside the chart.)
-    style = ('<style>.u-legend .u-series:first-child{display:none !important;}'
-             '.u-legend .u-value{display:none !important;}'
-             '.u-legend{color:#1b2a36;font-size:11px;}</style>')
+    # Hide the redundant uPlot title (we draw our own label) + the idle x-axis
+    # "1969" row; KEEP the value cells so hovering shows each series' value.
+    style = ('<style>.u-title{display:none !important;}'
+             '.u-legend .u-series:first-child{display:none !important;}'
+             '.u-legend{color:#1b2a36;font-size:12px;}'
+             '.u-legend .u-value{font-weight:600;margin-left:2px;}</style>')
     svg = ('<svg width="1280" height="800" xmlns="http://www.w3.org/2000/svg" '
            'xmlns:svg="http://www.w3.org/2000/svg" xmlns:html="http://www.w3.org/1999/xhtml">'
            + style + "".join(svg_parts) + "</svg>")
