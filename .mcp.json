@@ -2,6 +2,10 @@
   "mcpServers": {
     "volttron-fuxa": {
       "command": "/home/keith/development/volttron-fuxa-implementation/mcp/run.sh"
+    },
+    "blender": {
+      "command": "uvx",
+      "args": ["blender-mcp"]
     }
   }
 }

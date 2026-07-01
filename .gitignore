@@ -12,3 +12,8 @@ venv/
 # Playwright MCP scratch snapshots
 .playwright-mcp/
 pp-*.png
+
+# 3D site model: regenerable mesh binaries + downloaded third-party addon
+site-model/build/*.glb
+site-model/build/*.dae
+tools/blendermcp-addon.py
