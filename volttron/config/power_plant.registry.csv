@@ -1,7 +1,7 @@
 Volttron Point Name,Modbus Register,Writable,Point Address,Units,Notes
 plant_active_power_mw,>H,FALSE,0,MW,Net real power export at the POI
-plant_reactive_power_mvar,>H,FALSE,1,MVAR,Reactive power (+50 offset; 17-83 = -33..+33)
-poi_voltage_kv,>H,FALSE,2,kV,POI voltage (x10; 1150 = 115.0 kV)
+plant_reactive_power_mvar,>H,FALSE,1,MVAR,Reactive power (+50 offset; ~0.5-99.5 = -49.5..+49.5 D-curve)
+poi_voltage_kv,>H,FALSE,2,kV,POI voltage (x10; 1000 = 100.0 kV)
 grid_frequency_hz,>H,FALSE,3,Hz,Grid frequency (x10; 600 = 60.0 Hz)
 power_factor,>H,FALSE,4,pf,Power factor (x100; 98 = 0.98)
 poi_current_a,>H,FALSE,5,A,POI line current
@@ -20,7 +20,7 @@ inverter2_status,>H,FALSE,17,code,Inverter 2 status 0=off 1=run 2=fault
 inverter3_status,>H,FALSE,18,code,Inverter 3 status 0=off 1=run 2=fault
 inverter4_status,>H,FALSE,19,code,Inverter 4 status 0=off 1=run 2=fault
 battery_soc_pct,>H,FALSE,20,pct,Battery state of charge
-battery_power_mw,>H,FALSE,21,MW,Battery power (+50 offset; 25-75 = -25..+25; + discharge)
+battery_power_mw,>H,FALSE,21,MW,Battery power (+50 offset; 12.5-87.5 = -37.5..+37.5; + discharge)
 battery_temp_c,>H,FALSE,22,degC,Battery temperature
 bess_status,>H,FALSE,23,code,BESS status 0=idle 1=discharge 2=charge 3=fault
 daily_energy_mwh,>H,FALSE,24,MWh,Daily energy exported (demo-scaled)
@@ -32,9 +32,12 @@ substation_load_mw,>H,FALSE,29,MW,District-heating substation pump load
 campus_load_mw,>H,FALSE,30,MW,Total campus load (base + substation)
 grid_power_mw,>H,FALSE,31,MW,Grid exchange (+100 offset; >100 export <100 import)
 solar_to_load_pct,>H,FALSE,32,pct,Share of campus load met by the solar plant
+inverter5_status,>H,FALSE,33,code,Inverter 5 status 0=off 1=run 2=fault
+inverter6_status,>H,FALSE,34,code,Inverter 6 status 0=off 1=run 2=fault
+feeder_current_a,>H,FALSE,35,A,Representative 34.5 kV feeder current (6 feeders x 7 x 4 MVA; <600 A)
 power_setpoint_mw,>H,TRUE,0,MW,Plant export cap / curtailment setpoint
 mvar_setpoint,>H,TRUE,1,MVAR,Reactive dispatch setpoint (+50 offset; 50 = 0 MVAR)
-voltage_setpoint_kv,>H,TRUE,2,kV,POI voltage setpoint (x10; 1150 = 115.0 kV)
+voltage_setpoint_kv,>H,TRUE,2,kV,POI voltage setpoint (x10; 1000 = 100.0 kV)
 bess_mode,>H,TRUE,3,code,BESS mode 0=auto 1=force-charge 2=force-discharge
 bess_power_cmd_mw,>H,TRUE,4,MW,Manual battery power cmd (+50 offset; 50 = 0 MW)
 breaker_cmd,>H,TRUE,5,code,POI breaker command 0=open 1=close

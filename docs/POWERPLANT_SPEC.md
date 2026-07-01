@@ -15,24 +15,28 @@ Files touched (per handoff §2):
 
 ## 1. Overview
 
-**Plant identity.** `Sunfield Solar — 100 MWac utility-scale PV + DC-coupled BESS`, single-axis tracked, with a 25 MW / 100 MWh (4-hour) lithium battery on the DC bus.
+**Plant identity.** `Sunfield Solar — 150 MWac utility-scale PV + DC-coupled BESS`, single-axis tracked, with a 37.5 MW / 150 MWh (4-hour) lithium battery on the DC bus.
+
+> **Uprate note (v2.1, reconciled v2.3).** The plant was sized up from the original 100 MWac / 4-block design to **150 MWac / 6 blocks** (BESS scaled ×1.5 to 37.5 MW / 150 MWh). The nameplate table, constants, and the derived sanity figures below **now reflect the 150 MW / 100 kV plant** (peak DC ~166 MW, clips at 150, cloud-sag ~89). Any residual "×1.5" narrative equals the old 100 MW value × 1.5.
+>
+> **Topology note (v2.2).** Reorganized into an explicit **two-level step-up**: inverter LV **690 V** → inverter transformers → **34.5 kV** collection feeders → **main GSU** → **100 kV POI** (was 115 kV). The 6 SCADA blocks are now **feeders** (7 × 4 MVA inverters each, ≈468 A < 600 A by design). New point `feeder_current_a` (idx 35); POI nominal 100 kV (`poi_voltage_kv`/`voltage_setpoint_kv` store 1000). Old "34.5/115 kV" / "115 kV POI" prose below is superseded.
 
 | Property | Value |
 |---|---|
-| AC rating (POI) | **100 MWac** |
-| DC array (STC) | **125 MWdc** (ILR = 1.25) |
-| Inverter blocks | **4 × 25 MWac** (31.25 MWdc each) |
-| BESS | **25 MW / 100 MWh**, **DC-coupled**, usable SOC 10–90 %, RTE 0.88 (η_ow 0.938) |
-| Collector bus | 34.5 kV (LV→MV via inverter pad-mounts, MV→115 kV via main GSU) |
-| Step-up / POI | **115 kV**, 60.0 Hz (US) |
-| Reactive envelope | **±33 MVAR**, MVA-limited D-curve `S_max = 105.3 MVA` (inverter headroom **+ 25 MVA BESS PCS**); STATCOM at night |
+| AC rating (POI) | **150 MWac** |
+| DC array (STC) | **187.5 MWdc** (ILR = 1.25) |
+| Inverter blocks | **6 × 25 MWac** (31.25 MWdc each) |
+| BESS | **37.5 MW / 150 MWh**, **DC-coupled**, usable SOC 10–90 %, RTE 0.88 (η_ow 0.938) |
+| Collection (two-level) | inverter LV **690 V** → **34.5 kV** feeder (inverter transformers) → **100 kV** POI (main GSU); **6 feeders × 7 × 4 MVA**, ≈468 A < 600 A |
+| Step-up / POI | **100 kV**, 60.0 Hz |
+| Reactive envelope | **±49.5 MVAR** (0.95 PF at 150 MW), MVA-limited D-curve `S_max = 157.9 MVA` (inverter headroom **+ 37.5 MVA BESS PCS**); STATCOM at night |
 | Trackers | single-axis ±60° |
 
-**Headline electrical story (what an EE reads in two seconds).** Net export `plant_active_power_mw` at the 115 kV POI tracks the sun and **clips flat at 100 MW** while DC keeps climbing (ILR 1.25). At peak, the **DC-coupled battery charges from the energy that would otherwise be clipped, so SOC rises**; on a passing cloud, the **battery discharges through the shared inverters to firm export.** Grid Hz, POI kV, MVAR/PF, and the POI breaker are all live and protection-grade, with **IEEE 1547-2018 / PRC-024 ride-through** (no nuisance trips).
+**Headline electrical story (what an EE reads in two seconds).** Net export `plant_active_power_mw` at the 100 kV POI tracks the sun and **clips flat at 150 MW** while DC keeps climbing (ILR 1.25). At peak, the **DC-coupled battery charges from the energy that would otherwise be clipped, so SOC rises**; on a passing cloud, the **battery discharges through the shared inverters to firm export.** Grid Hz, POI kV, MVAR/PF, and the POI breaker are all live and protection-grade, with **IEEE 1547-2018 / PRC-024 ride-through** (no nuisance trips).
 
 **Honest firming claim (resolves the "oversold money-moment" blocker).** A 25 MW battery can fully firm a shortfall of **≤25 MW**. Therefore:
-- The **signature `day_in_the_life` cloud is a shallow dip to ~720 W/m²** (PV stays ≥ ~80 MW; the ~20 MW gap is fully covered → **Plant MW genuinely holds flat at 100**).
-- The **deep G→300 W/m² cloud is kept for `cloud_passing` and `low_soc`**, reframed honestly as **dip-shaving** (Plant MW sags 100 → ~75 instead of 100 → ~35), with `low_soc` as the negative-space proof (no battery → sag follows the sun).
+- The **signature `day_in_the_life` cloud is a shallow dip to ~720 W/m²** (PV stays ≥ ~118 MW; the ~32 MW gap is fully covered → **Plant MW genuinely holds flat at 150**).
+- The **deep G→300 W/m² cloud is kept for `cloud_passing` and `low_soc`**, reframed honestly as **dip-shaving** (Plant MW sags 150 → ~89 instead of 150 → ~52), with `low_soc` as the negative-space proof (no battery → sag follows the sun).
 
 **Framing decision.** We graft Proposal 2's *operator-cockpit information design* onto Proposal 1's *electrical-one-line rigor* and stage it with Proposal 3's *side-by-side signature trends*. The entry view leads with the four numbers a plant engineer checks first (Plant MW, Grid Hz, POI kV, SOC) as big radial dials **and** carries a live electrical single-line — electrical-led AND tells the day-in-the-life story on one screen. EE drill-downs (full one-line / PQ envelope, BESS energy bookkeeping) are one nav button away.
 
@@ -58,20 +62,20 @@ Internally consistent across `sim.py` (`INPUTS`/`HOLDING`/`DISCRETE`), `power_pl
 |---|---|---|---|---|
 | 0 | `plant_active_power_mw` | MW | x1, 0..110 | **Headline.** Net real export at POI = clamp(inverter_ac_power, 0, P_setpoint). |
 | 1 | `plant_reactive_power_mvar` | MVAR | **+50 offset** (store Q+50; 17..83 → −33..+33) | + export VARs / − absorb. Clamped to the D-curve (§3-9). |
-| 2 | `poi_voltage_kv` | kV | **x10** (1150 = 115.0) | 115 kV nominal; moves ±~2 kV with MVAR. |
+| 2 | `poi_voltage_kv` | kV | **x10** (1000 = 100.0) | 100 kV nominal; moves ±~3 kV with MVAR. |
 | 3 | `grid_frequency_hz` | Hz | **x10** (600 = 60.0) | Grid-driven; dial band 59.0–61.0 (see §5). |
 | 4 | `power_factor` | — | **x100** (98 = 0.98) | magnitude P/√(P²+Q²); **guarded to 100 (PF 1.00) when S < 0.5 MVA** (night). |
-| 5 | `poi_current_a` | A | x1, 0..600 | I = S·10⁶/(√3·V_poi). ~500 A at full real export, ~529 A at full Q. |
+| 5 | `poi_current_a` | A | x1, 0..950 | I = S·10⁶/(√3·V_poi). ~866 A at full real export (150 MW/100 kV), ~912 A at full Q. Shown on a numeric tile (not a capped dial). |
 | 6 | `main_breaker_status` | code | x1 (0 open / 1 closed) | **In INPUT (not discrete)** so the proceng breaker symbol recolors and the AC pipe animation stops when open. |
 | 7 | `irradiance_wm2` | W/m² | x1, 0..1200 | The "fuel" / external driver. |
 | 8 | `pv_dc_power_mw` | MW | x1, 0..125 | **PV-array DC only** (after temp derate). Climbs past 100 = the clip story. |
-| 9 | `inverter_ac_power_mw` | MW | x1, 0..100 | Aggregate AC at inverter terminals (PV **+ DC-coupled battery**); **clips flat at 100**. |
+| 9 | `inverter_ac_power_mw` | MW | x1, 0..150 | Aggregate AC at inverter terminals (PV **+ DC-coupled battery**); **clips flat at 150** (and throttles down to the export setpoint under operator curtailment). |
 | 10 | `clipping_loss_mw` | MW | x1, 0..30 | max(0, P_dc_net·η_inv − cap). **DC-coupled battery suppresses this at peak until SOC≥90.** |
 | 11 | `inverter_efficiency_pct` | % | x1, ~96..99 | η from a **real part-load curve** (~98.5 mid/high; sags only below ~15–20 % load). **Not** P_ac/P_dc — clipping lives in `clipping_loss`. |
 | 12 | `ambient_temp_c` | °C | x1 | Diurnal driver for NOCT (25 + 8·sin → peaks ~33 °C at solar noon). |
 | 13 | `panel_temp_c` | °C | x1, 0..80 | T_amb + 0.03125·G; **~56 °C at the (G=1000,T_amb=25) reference, ~66 °C at signature solar noon (G=1050,T_amb=33).** |
 | 14 | `tracker_angle_deg` | deg | **+60 offset** (0..120 → −60..+60) | E(−)→noon(0)→W(+). Cosmetic + small gain. |
-| 15 | `performance_ratio_pct` | % | x1, **~80..93** | PR_inst = P_ac/((G/1000)·125)·100; **~80 % at clip, rises to ~90–93 % at cool part load.** |
+| 15 | `performance_ratio_pct` | % | x1, **~76..93** | PR_inst = P_ac/((G/1000)·187.5)·100; **~76 % at clip, rises to ~90–93 % at cool part load.** |
 | 16 | `inverter1_status` | code | x1 (0 off/1 run/2 fault) | Drives proceng symbol #1. |
 | 17 | `inverter2_status` | code | x1 | Symbol #2. |
 | 18 | `inverter3_status` | code | x1 | Symbol #3. |
@@ -86,9 +90,9 @@ Internally consistent across `sim.py` (`INPUTS`/`HOLDING`/`DISCRETE`), `power_pl
 
 | idx | name | units | scaling | default | note |
 |---|---|---|---|---|---|
-| 0 | `power_setpoint_mw` | MW | x1, 0..100 | **100** | Export cap / curtailment. |
+| 0 | `power_setpoint_mw` | MW | x1, 0..150 | **150** | Export cap / curtailment. |
 | 1 | `mvar_setpoint` | MVAR | **+50 offset** (17..83 → −33..+33) | **50** (0 MVAR) | Reactive dispatch; clamped to D-curve. |
-| 2 | `voltage_setpoint_kv` | kV | **x10** | **1150** | Optional closed-loop V mode (plant trims Q toward target). |
+| 2 | `voltage_setpoint_kv` | kV | **x10** | **1000** | Optional closed-loop V mode (plant trims Q toward target). |
 | 3 | `bess_mode` | code | x1 (0 auto/1 force-charge/2 force-discharge) | **0** | Dispatch mode. |
 | 4 | `bess_power_cmd_mw` | MW | **+50 offset** (25..75 → −25..+25) | **50** (0) | Manual battery cmd; honored only in force modes. |
 | 5 | `breaker_cmd` | code | x1 (0 open / 1 close) | **1** | POI breaker command → `main_breaker_status`. |
@@ -99,7 +103,7 @@ Internally consistent across `sim.py` (`INPUTS`/`HOLDING`/`DISCRETE`), `power_pl
 | idx | name | note |
 |---|---|---|
 | 0 | `inverter_fault` | any `inverterN_status == 2`. |
-| 1 | `grid_over_voltage` | poi_voltage > 1.05·115 kV (store > 1207); reachable only via `grid_fault`. |
+| 1 | `grid_over_voltage` | poi_voltage > 1.05·100 kV (store > 1050); reachable only via `grid_fault`. |
 | 2 | `grid_under_frequency` | grid_frequency < 59.5 Hz (store < 595). **Ride-through indication, not a trip.** |
 | 3 | `breaker_trip` | protective trip on **sustained/severe** excursion only (§3-10); forces `main_breaker_status=0`, export→0. |
 | 4 | `battery_over_temp` | battery_temp > 45 °C. |
@@ -120,26 +124,26 @@ Total: 25 inputs + 7 holding + 9 discrete = 41 points.
 
 **Validated constants (PVWatts/NREL-grade — literals to put in `sim.py`):**
 ```
-P_AC_RATED = 100.0   # MW
-P_DC_STC   = 125.0   # MW  (ILR 1.25)
-N_INV      = 4       # blocks, 25 MWac / 31.25 MWdc each
+P_AC_RATED = 150.0   # MW  (6 x 25 MWac blocks)
+P_DC_STC   = 187.5   # MW  (ILR 1.25)
+N_INV      = 6       # blocks, 25 MWac / 31.25 MWdc each
 ETA_INV    = 0.985
 GAMMA_P    = -0.0037 # /degC  (-0.37%/degC)
 NOCT_K     = 0.03125 # (NOCT-20)/800, NOCT=45
-E_CAP      = 100.0   # MWh
-P_BATT_MAX = 25.0    # MW (0.25C)
+E_CAP      = 150.0   # MWh
+P_BATT_MAX = 37.5    # MW (0.25C)
 SOC_LO, SOC_HI = 10.0, 90.0   # usable window %
 ETA_OW     = 0.938   # one-way = sqrt(RTE 0.88)
-S_MAX      = 105.3   # MVA  (inverter headroom + 25 MVA BESS PCS)
-Q_MAX      = 33.0    # MVAR (0.95 PF at 100 MW)
-V_NOM      = 115.0   # kV
+S_MAX      = 157.9   # MVA  (inverter headroom + 37.5 MVA BESS PCS)
+Q_MAX      = 49.5    # MVAR (0.95 PF at 150 MW)
+V_NOM      = 100.0   # kV  (POI / HV side of the main GSU)
 KV_PER_MVAR= 0.06    # kV/MVAR grid stiffness (SCR ~19)
 F_NOM      = 60.0    # Hz
 DT         = 1.0     # s
-K_SLOW     = 0.01    # EMA gain for the slow PV baseline (~100 s tau)  -- ramp-smoothing auto law
-K_COMP     = 180.0   # demo time-compression (sim-s -> real-h equiv) for daily_energy
-TH_GAIN    = ...     # battery thermal: set so 0.25C steady-state settles ~36 C (see step 7)
-TH_DECAY   = ...
+K_DECAY    = 0.11    # firming-envelope slow-decay gain (tau ~9 s) -- as-built replaces v2.0 K_SLOW EMA (addendum B)
+SOC_TC     = 60.0    # SOC/daily_energy demo time-lapse -- as-built replaces v2.0 K_COMP=180 (addendum B/A)
+TH_GAIN    = 0.002   # battery thermal: 0.25C steady-state settles ~T_amb+6.5 C (see step 7)
+TH_DECAY   = 0.05
 ```
 
 **Coupled update law (strict order):**
@@ -151,8 +155,8 @@ TH_DECAY   = ...
 **(3) Cell temp (NOCT).** `T_cell = T_amb + 0.03125·G`. (Reference G=1000, T_amb=25 → **56.25 °C**; signature solar noon G=1050, T_amb≈33 → **~66 °C**.)
 
 **(4) PV DC power w/ derate.** `n_ok = count(inverterK_status == 1)`.
-`P_dc_pv = (G·g_track/1000)·125·(1 + (−0.0037)·(T_cell − 25))·(n_ok/4)`, clamp ≥ 0.
-(Reference: derate = 1 − 0.0037·31.25 = **0.884** → P_dc_pv = **110.5 MW**. Signature noon: derate ≈ 0.849 → **~111 MW**.)
+`P_dc_pv = (G·g_track/1000)·187.5·(1 + (−0.0037)·(T_cell − 25))·(n_ok/6)`, clamp ≥ 0.
+(Reference: derate = 1 − 0.0037·31.25 = **0.884** → P_dc_pv = **165.8 MW**. Signature noon: derate ≈ 0.849 → **~167 MW**.)
 
 **(5) DC-coupled BESS dispatch (auto = ramp-rate smoothing + clip-capture).** This replaces the degenerate "fill-to-nameplate" law that all three reviews flagged.
 
@@ -182,12 +186,14 @@ Limits: if `SOC ≤ 10` block discharge (`P_batt_dc>0 → 0`); if `SOC ≥ 90` b
 **(6) Inverter + hard clip (shared by PV and battery on the DC bus).** If `main_breaker_status == 1`:
 ```
 P_dc_net = P_dc_pv + P_batt_dc            # battery charge (−) subtracts DC, discharge (+) adds DC
-P_ac_cap = 100 · (n_ok/4)                 # losing a block drops the AC cap
-inverter_ac_power = clamp(min(P_dc_net·ETA_INV, P_ac_cap), 0, 100)
-clipping_loss     = max(0, P_dc_net·ETA_INV − P_ac_cap)
+P_ac_cap = 150 · (n_ok/6)                 # losing a block drops the AC cap (−25 MW)
+eff_cap  = min(P_ac_cap, P_setpoint)      # operator curtailment also throttles the inverters
+inverter_ac_power = clamp(min(P_dc_net·ETA_INV, eff_cap), 0, 150)          # throttled by hardware cap OR setpoint
+clipping_loss     = max(0, P_dc_net·ETA_INV − P_ac_cap)                    # ILR hardware clip only
+curtail_pv        = max(0, min(P_dc_net·ETA_INV, P_ac_cap) − P_setpoint)   # real PV curtailed by the operator setpoint
 ```
 Else (breaker open) `inverter_ac_power = 0`.
-(Reference peak, SOC<90: P_batt_dc≈−9 ⇒ P_dc_net≈101.5 ⇒ AC=100, **clipping_loss≈0**; once SOC≥90, P_batt_dc=0 ⇒ P_dc_net=110.5 ⇒ AC=100, **clipping_loss≈8.8 MW**.)
+(Reference peak, SOC<90: P_batt_dc≈−13.5 ⇒ P_dc_net≈152.3 ⇒ AC=150, **clipping_loss≈0**; once SOC≥90, P_batt_dc=0 ⇒ P_dc_net=165.8 ⇒ AC=150, **clipping_loss≈13.3 MW**.)
 `inverter_efficiency_pct` = a **part-load curve of its own AC loading** (≈98.5 % for load ≥ ~20 %, drooping to ~96 % below ~15 % load), stored x1, clamped 96..99 — **independent of clipping**.
 
 **(7) SOC integration with RTE — `/3600` PRESERVED (the unanimous blocker fix).**
@@ -195,7 +201,7 @@ Else (breaker open) `inverter_ac_power = 0`.
 discharge (P_batt_dc>0): SOC -= (P_batt_dc / ETA_OW) · DT / (3600 · E_CAP) · 100
 charge   (P_batt_dc<0): SOC += (|P_batt_dc| · ETA_OW) · DT / (3600 · E_CAP) · 100
 ```
-Sanity: at 25 MW discharge, `25/0.938/3600 = 0.0074 %/s` ⇒ 80 % usable / 0.0074 ≈ **10,800 s = 3.0 h**. (The v1.0 `…/E_CAP·100` shorthand that dropped `/3600` was wrong by 3600× and is deleted.)
+Sanity (150 MWh pack): at full 37.5 MW discharge, `(37.5/0.938)/(3600·150)·100 = 0.0074 %/s` ⇒ 80 % usable / 0.0074 ≈ **10,800 s = 3.0 h**; at 25 MW it is **0.0049 %/s ⇒ ~4.5 h**. (The v1.0 `…/E_CAP·100` shorthand that dropped `/3600` was wrong by 3600× and is deleted.)
 **Battery thermal (first-order, calibrated):** `battery_temp += TH_GAIN·|P_batt_dc| − TH_DECAY·(battery_temp − (T_amb+5))`, with `TH_GAIN`/`TH_DECAY` chosen so the **steady state at full 0.25C settles ~36 °C** (comfortably below the 45 °C trip) — not the per-tick `+0.02·|P|` that false-tripped in ~40 s.
 
 **(8) Plant export / curtailment.**
@@ -209,16 +215,16 @@ daily_energy_mwh  += P_plant · DT · K_COMP / 3600      # K_COMP maps compresse
 
 **(9) Reactive / voltage / PF — MVA-limited D-curve (replaces the `0.329·P` clamp).**
 ```
-Q_limit = min(Q_MAX, sqrt(S_MAX² − P_plant²))     # full ±33 down to low P; STATCOM at night
+Q_limit = min(Q_MAX, sqrt(S_MAX² − P_plant²))     # full ±49.5 down to low P; STATCOM at night
 Q = clamp(mvar_setpoint, −Q_limit, +Q_limit)
 # optional V-mode: if enabled, trim Q toward voltage_setpoint_kv
-poi_voltage_kv = 115 + 0.06·Q                      # store ×10
+poi_voltage_kv = 100 + 0.06·Q                      # store ×10
 S = sqrt(P_plant² + Q²)
 power_factor = (S < 0.5) ? 100 : round(100 · P_plant / S)   # night guard -> PF 1.00
 poi_current_a = round(S·10⁶ / (√3 · poi_voltage_kv·1000))
-performance_ratio_pct = round(100 · inverter_ac_power / max((G/1000)·125, 1))   # ~80 at clip, up to ~93 cool part-load
+performance_ratio_pct = round(100 · inverter_ac_power / max((G/1000)·187.5, 1))   # ~76 at clip, up to ~93 cool part-load
 ```
-(At P=100, Q=0, V=115 → **502 A**; at full Q=33, S=105.3 → **529 A**. At P=0 at night the D-curve still allows ±33 MVAR STATCOM — credited to the BESS PCS + inverters in reactive mode.)
+(At P=150, Q=0, V=100 → **866 A**; at full Q=49.5, S=157.9 → **912 A**. At P=0 at night the D-curve still allows ±49.5 MVAR STATCOM — credited to the BESS PCS + inverters in reactive mode.)
 
 **(10) Frequency + ride-through (IEEE 1547-2018 / PRC-024 — replaces the instantaneous nuisance trip).**
 ```
@@ -242,15 +248,15 @@ Each = holding overrides + fault flags (+ irradiance driver), applied over defau
 
 | name | overrides / faults | operator sees |
 |---|---|---|
-| **`day_in_the_life`** (signature) | scripted G + T_amb daily curve incl. **shallow cloud (G→~720)**; `bess_mode=0`, `power_setpoint=100`, `breaker_cmd=1`, `tracker_enable=1`; no faults | The whole arc on the entry view: **sunrise** (G 0→1050, trackers swing −60→0, Plant MW climbs, battery idle on the smooth ramp, AC pipe energizes, daily_energy counts); **peak** (DC trend overtakes 100, **AC pins flat at 100**, the **DC-coupled battery charges from the clip → SOC donut rises, clipping_loss≈0**, panel_temp ~66 °C, charge lamp/pipe); **shallow cloud** (G→~720, PV sags ~20 MW but **Plant MW holds flat at 100 — battery discharges ~20 MW**, SOC donut dips, discharge lamp/pipe); **evening** (G→0, trackers →+60 then stow, battery covers the shoulder then idles). |
+| **`day_in_the_life`** (signature) | scripted G + T_amb daily curve incl. **shallow cloud (G→~720)**; `bess_mode=0`, `power_setpoint=150`, `breaker_cmd=1`, `tracker_enable=1`; no faults | The whole arc on the entry view: **sunrise** (G 0→1050, trackers swing −60→0, Plant MW climbs, battery idle on the smooth ramp, AC pipe energizes, daily_energy counts); **peak** (DC trend overtakes 150, **AC pins flat at 150**, the **DC-coupled battery charges from the clip → SOC donut rises, clipping_loss≈0**, panel_temp ~66 °C, charge lamp/pipe); **shallow cloud** (G→~720, PV sags ~32 MW but **Plant MW holds flat at 150 — battery discharges ~32 MW**, SOC donut dips, discharge lamp/pipe); **evening** (G→0, trackers →+60 then stow, battery covers the shoulder then idles). |
 | `sunrise` | G ramp 0→1000; `tracker_enable=1`, `breaker_cmd=1`, `bess_mode=0` | Plant MW and AC climb from 0; inverters off→run (grey→green); breaker closed/green; battery near-idle. |
-| `peak_sun` | G≈1050, T_amb high, `power_setpoint=100`, `bess_mode=0` | DC>100, AC clipped flat at 100; **battery captures the clip (SOC rising, clipping_loss≈0) until SOC≥90, then clipping_loss climbs to ~10 MW and `curtailment_active` lights**; PR ~80 %, panel_temp ~66 °C. |
-| `cloud_passing` | **deep** G dip 1000→300→1000 (~35 s), `bess_mode=0`, setpoint held | **Dip-shaving:** PV/AC sag hard, **battery saturates at +25 MW so Plant MW sags 100→~75 (not →~35) then recovers** — the honest "battery sharply softens a deep dip" beat; discharge lamp/pipe. |
+| `peak_sun` | G≈1050, T_amb high, `power_setpoint=150`, `bess_mode=0` | DC>150, AC clipped flat at 150; **battery captures the clip (SOC rising, clipping_loss≈0) until SOC≥90, then clipping_loss climbs to ~15 MW and `curtailment_active` lights**; PR ~76 %, panel_temp ~66 °C. |
+| `cloud_passing` | **deep** G dip 1000→300→1000 (~35 s), `bess_mode=0`, setpoint held | **Dip-shaving:** PV/AC sag hard, **battery saturates at +37.5 MW so Plant MW sags 150→~89 (not →~52) then recovers** — the honest "battery sharply softens a deep dip" beat; discharge lamp/pipe. |
 | `curtailment` | `power_setpoint=60`, `bess_mode=0` | `curtailment_active` lit; surplus first charges BESS (SOC rises) then real PV is curtailed; Plant MW pins at 60 under full sun. |
 | `evening` | G down-ramp 1000→0; `bess_mode=0` | PV fades, trackers →+60 then stow, battery covers the shoulder (discharge, SOC declines) then idles. |
-| `inverter_trip` | fault `inverter2` → `inverter2_status=2` | symbol #2 red, `inverter_fault` lamp; **AC cap drops to 75 MW (DC-coupling shares the inverters, so the battery cannot push export past the reduced cap)** → **Plant MW steps down to ~75 (visible step), surplus DC charges the battery**; the −25 MW block loss is real and shown on both Plant MW and the inverter_ac trend. |
+| `inverter_trip` | fault `inverter2` → `inverter2_status=2` | symbol #2 red, `inverter_fault` lamp; **AC cap drops to 125 MW (DC-coupling shares the inverters, so the battery cannot push export past the reduced cap)** → **Plant MW steps down to ~125 (visible step), surplus DC charges the battery**; the −25 MW block loss is real and shown on both Plant MW and the inverter_ac trend. |
 | `grid_fault` | moderate: perturb `grid_frequency`→59.3 (rides through); severe: sustained/deep excursion → `breaker_trip` | Moderate: Hz dial leaves the green band, `grid_under_frequency`/`grid_over_voltage` indicate, **plant rides through (momentary cessation), export continues**. Severe: **breaker auto-opens (red gap), export → 0**. |
-| `bess_dispatch` | `bess_mode=2`, `bess_power_cmd=+25` (store 75) | Battery injects +25 through the inverters (clipped to the 100 MW cap), SOC falls steadily, discharge lamp/pipe. |
+| `bess_dispatch` | `bess_mode=2`, `bess_power_cmd=+25` (store 75) | Battery injects +25 through the inverters (clipped to the 150 MW cap), SOC falls steadily, discharge lamp/pipe. |
 | `low_soc` | pre-drain (force-discharge / repeated deep clouds) until **`SOC≤10`**, then a deep cloud | `low_soc` lamp; **discharge blocked at the 10 % floor → next deep cloud sags Plant MW with the sun** (negative-space proof of the battery's worth). |
 
 ---
@@ -285,24 +291,24 @@ Canvas **1280 × 800**, dark bkcolor.
 6. Small `svg-ext-value` strip under the band (y≈185): `power_factor` (label "PF ×100"), `daily_energy_mwh` (label "MWh demo-scaled"), `performance_ratio_pct` (%), `clipping_loss_mw` (MW).
 
 **CENTER animated single-line** (y≈220–470), left→right, hand-authored proceng symbols + animated pipes (with two-stage step-up so it reads correctly to an EE):
-`☀ SUN` (recolored by irradiance band) → **blue DC pipe** (animated) → `PV ARRAY (125 MWdc)` block → **DC bus node** with the **`BATTERY` symbol on a DC/DC branch** (→ `bess_status`; pipe **clockwise=discharge / anticlockwise=charge**, bound to `bess_status`) → **4-up INVERTER BANK w/ pad-mount step-up (0.6/34.5 kV)** (proceng symbols → `inverter1..4_status`, 0 grey/1 green/2 red) → **amber AC pipe — 34.5 kV collector** → `MAIN GSU (34.5/115 kV)` (two-coil) → **POI BREAKER** (proceng → `main_breaker_status`, closed green / open red gap; the AC pipe `stop`s animating when `main_breaker_status=0`) → `GRID TOWER (115 kV)`. Overlay `svg-ext-value` chips: Plant MW at the POI node, SOC at the battery. (Battery is on the **DC** side — this is the DC-coupled topology that lets it capture clipping.)
+`☀ SUN` (recolored by irradiance band) → **blue DC pipe** (animated) → `PV ARRAY (187.5 MWdc)` block → **DC bus node** with the **`BATTERY` symbol on a DC/DC branch** (→ `bess_status`; pipe **clockwise=discharge / anticlockwise=charge**, bound to `bess_status`) → **6-up INVERTER BANK w/ pad-mount step-up (0.69/34.5 kV)** (proceng symbols → `inverter1..6_status`, 0 grey/1 green/2 red) → **amber AC pipe — 34.5 kV collector** → `MAIN GSU (34.5/100 kV)` (two-coil) → **POI BREAKER** (proceng → `main_breaker_status`, closed green / open red gap; the AC pipe `stop`s animating when `main_breaker_status=0`) → `GRID TOWER (100 kV)`. Overlay `svg-ext-value` chips: Plant MW at the POI node, SOC at the battery. (Battery is on the **DC** side — this is the DC-coupled topology that lets it capture clipping.)
 
 **RIGHT annunciator stack** (x≈1080–1270, y≈220–620): nine `svg-ext-gauge_semaphore` lamps + `svg-ext-value` labels for the 9 discrete alarms (red on raise).
 
 **BOTTOM signature trends** (y≈630–790), two `svg-ext-html_chart`, ~200 px tall, side by side:
 - **LEFT "Plant MW vs Irradiance"** (x≈10–630): **Y1 pinned 0–120 MW** lines `pv_dc_power_mw`, `inverter_ac_power_mw`, `plant_active_power_mw`; **Y2 pinned 0–1200 W/m²** line `irradiance_wm2`. → DC climbs, **AC flat-tops** while irradiance still rises.
-- **RIGHT "BESS Firming"** (x≈650–1270): **Y1 pinned 0–100 %** line `battery_soc_pct`; **Y2 pinned 25–75 raw (= −25..+25 MW)** line `battery_power_mw` (axis labeled "MW +50"). → at peak battery charges (SOC up); on the shallow cloud battery_power spikes + and SOC dips while left-chart Plant MW stays flat at 100.
+- **RIGHT "BESS Firming"** (x≈650–1270): **Y1 pinned 0–100 %** line `battery_soc_pct`; **Y2 pinned 10–90 raw (≈ −40..+40 MW, covers ±37.5)** line `battery_power_mw` (axis labeled "MW +50"). → at peak battery charges (SOC up); on the shallow cloud battery_power spikes + and SOC dips while left-chart Plant MW stays flat at 150.
 
 **NAV** (`svg-ext-html_button`, top-right corner): "ELECTRICAL ONE-LINE →" (`onpage` `v_pp_oneline`), "BESS DETAIL →" (`onpage` `v_pp_bess`), "→ SUBSTATION" (`onpage` `v_heat_station`). Plus `svg-ext-html_switch` (or button fallback) for `tracker_enable`.
 
 ### 5.2 `v_pp_oneline` — Electrical One-Line & POI Metering
 Canvas **1280 × 800**.
 
-**Full single-line strip** (top, left→right, proceng + animated pipe): `PV ARRAY + DC BESS aggregate` → `INVERTER ARRAY w/ pad-mounts (0.6/34.5 kV)` (4 proceng symbols in a 2×2, each with a small semaphore → `inverterN_status`) → `34.5 kV COLLECTOR` → `MAIN GSU (34.5/115 kV)` (two-coil) → **animated BREAKER** (→ `main_breaker_status`; pipe halts on open) → `POI metering node (115 kV)` → `GRID tower`.
+**Full single-line strip** (top, left→right, proceng + animated pipe): `PV ARRAY + DC BESS aggregate` → `INVERTER ARRAY w/ pad-mounts (0.69/34.5 kV)` (6 proceng symbols, each with a small semaphore → `inverterN_status`) → `34.5 kV COLLECTOR` → `MAIN GSU (34.5/100 kV)` (two-coil) → **animated BREAKER** (→ `main_breaker_status`; pipe halts on open) → `POI metering node (100 kV)` → `GRID tower`.
 
 **Big metering readouts** (`svg-ext-value`, large): `plant_active_power_mw` (huge), `clipping_loss_mw`, `poi_current_a`, `inverter_efficiency_pct` (integer-native tiles). A **center-zero `svg-ext-html_bag` Gauge** → `plant_reactive_power_mvar` (min 17 max 83, 0-mark at 50, left=absorb / right=export) shows lead/lag at a glance; flanked by dials for `poi_voltage_kv` and `power_factor`.
 
-**PQ-envelope chart** (bottom dual-axis `svg-ext-html_chart`): **Y1 pinned 1090–1210 raw (=109..121 kV)** line `poi_voltage_kv`; **Y2 pinned 17–83 raw (=−33..+33 MVAR)** line `plant_reactive_power_mvar`. → POI voltage tracks reactive dispatch.
+**PQ-envelope chart** (bottom dual-axis `svg-ext-html_chart`): **Y1 pinned 950–1050 raw (=95..105 kV)** line `poi_voltage_kv`; **Y2 pinned 0–100 raw (=−50..+50 MVAR)** line `plant_reactive_power_mvar`. → POI voltage tracks reactive dispatch.
 
 **RIGHT controls column** (sliders/switches/input — verify-one-first, else button fallback): `power_setpoint_mw` (0–100); `mvar_setpoint` (display −33..+33, write +50 offset → 17..83); `voltage_setpoint_kv` (typed, ×10); `breaker_cmd` (CLOSE/OPEN → 1/0); `tracker_enable`. Annunciator lamps for `grid_over_voltage`, `grid_under_frequency`, `breaker_trip`, `inverter_fault`, `dc_ground_fault`, `comms_loss`, `curtailment_active`.
 
@@ -341,7 +347,7 @@ Update tool docstrings to enumerate the power-plant scenario names (`day_in_the_
 2. **Registry + device** — `power_plant.registry.csv` (rows exactly matching §2 indices/spaces) + `device.power_plant.json` (slave_id 2) + second `vctl config store` in `entrypoint.sh`. `docker compose down && up` (never plain restart). Confirm VOLTTRON publishes all 41 points.
 3. **Verify-one-first gates (do these BEFORE mass-generation, in order):** (a) one `svg-ext-html_bag` Plant MW dial renders; (b) one `svg-ext-pipe` animates with `{clockwise,stop}`; (c) one hand-authored `svg-ext-proceng` recolors on 0/1/2 and one `onpage` button switches views; (d) one `svg-ext-html_slider`/`_switch`/`_select`/`_input` writes via the binding. **Any that fail → use the §5 proven fallback (numeric+progress / static recolor / `html_button` presets) and proceed.**
 4. **Generator** — `powerplant_dashboard.py` building device + the three views + combined `charts[]`; merge into the single `POST /api/project` (full replace — must include the substation device/view too). Stable ids `v_power_plant`/`v_pp_oneline`/`v_pp_bess`.
-5. **Verify live** — Playwright screenshot each view; drive `day_in_the_life`, `cloud_passing`, `inverter_trip`, `grid_fault` via MCP; confirm the clip flat-top, **SOC rising at peak then dipping on the cloud**, the breaker animation, and that the deep `cloud_passing` shows the honest 100→~75 dip-shave (not a false flat hold).
+5. **Verify live** — Playwright screenshot each view; drive `day_in_the_life`, `cloud_passing`, `inverter_trip`, `grid_fault` via MCP; confirm the clip flat-top, **SOC rising at peak then dipping on the cloud**, the breaker animation, and that the deep `cloud_passing` shows the honest 150→~89 dip-shave (not a false flat hold).
 
 **Known gotchas (do not relearn):**
 - **VOLTTRON entrypoint is not idempotent** on `docker restart` (stale `VOLTTRON_HOME` → conflicting identity). Always `docker compose down && up` or `--force-recreate volttron`.
@@ -356,7 +362,7 @@ Update tool docstrings to enumerate the power-plant scenario names (`day_in_the_
 - **gauge_progress child rects MUST be id-prefixed `A-/B-/H-`** or the signal pipeline throws.
 - **Modbus space discipline:** input→FC4 (measurements + `main_breaker_status`), holding→FC3 (setpoints), discrete→FC2 (alarms). `main_breaker_status` is deliberately an INPUT register (drives the symbol/pipe), distinct from the `breaker_trip` discrete alarm and the `breaker_cmd` holding command.
 - **SOC math: keep the `/3600`.** `SOC%/step = (P_batt/ETA_OW)·DT/(3600·E_CAP)·100` (discharge); the no-`/3600` shorthand drains the pack in ~3 s and is the single most dangerous typo in this spec.
-- **Numbers to sanity-check on screen** (an EE will): peak PV DC ≈ **110.5 MW** at the reference / **~111 MW** at signature solar noon; AC clipped **100**; **clipping_loss ≈ 0 while the battery captures it, climbing to ~8.8–10 MW only at SOC≥90**; panel_temp **~56 °C reference / ~66 °C signature noon**; PR **~80 % at clip, up to ~90–93 % at cool part load**; POI current **~502 A** (unity) to **~529 A** (full Q); inverter_efficiency **~98.5 %** (not derived from P_ac/P_dc); 25 MW discharge drains usable SOC in **~3 h**; reactive **±33 MVAR available across the operating range incl. night STATCOM**; deep `cloud_passing` sags Plant MW to **~75**, not flat.
+- **Numbers to sanity-check on screen** (an EE will): peak PV DC ≈ **165.8 MW** at the reference / **~167 MW** at signature solar noon; AC clipped **150**; **clipping_loss ≈ 0 while the battery captures it, climbing to ~13–15 MW only at SOC≥90**; panel_temp **~56 °C reference / ~66 °C signature noon**; PR **~76 % at clip, up to ~90–93 % at cool part load**; POI current **~866 A** (unity) to **~912 A** (full Q); inverter_efficiency **~98.5 %** (not derived from P_ac/P_dc); full **37.5 MW** discharge drains usable SOC in **~3 h** (25 MW → ~4.5 h); reactive **±49.5 MVAR available across the operating range incl. night STATCOM**; deep `cloud_passing` sags Plant MW to **~89**, not flat.
 
 ---
 
@@ -364,10 +370,10 @@ Update tool docstrings to enumerate the power-plant scenario names (`day_in_the_
 
 Key changes made in response to the three adversarial reviews:
 
-1. **SOC `/3600` bug (unanimous blocker):** restored the seconds→hours factor — `SOC ±= (P_batt[/·]ETA_OW)·DT/(3600·E_CAP)·100`. Deleted the wrong `…/E_CAP·100` shorthand. Verified to 0.0074 %/s → 3.0 h.
+1. **SOC `/3600` bug (unanimous blocker):** restored the seconds→hours factor — `SOC ±= (P_batt[/·]ETA_OW)·DT/(3600·E_CAP)·100`. Deleted the wrong `…/E_CAP·100` shorthand. Verified on the 150 MWh pack to 0.0074 %/s → 3.0 h at 37.5 MW (0.0049 %/s → 4.5 h at 25 MW).
 2. **Degenerate auto-dispatch + "SOC rises at peak" impossibility (unanimous blocker):** re-spec the BESS as **DC-coupled** (my call among the reviewers' options a/b/c — it resolves the most issues at once and is a real topology) so it charges from DC **clipping** at peak (SOC genuinely rises, clipping_loss → 0), and replaced "fill-to-nameplate" with a **ramp-rate-smoothing auto law** (slow EMA baseline + clip-capture) so the battery no longer drains all morning and is available for the demo cloud.
-3. **Oversold cloud-firming (blocker, two reviews):** signature `day_in_the_life` cloud shallowed to **G→~720** so Plant MW genuinely holds flat at 100; the deep **G→300** cloud is retained in `cloud_passing`/`low_soc` and reframed honestly as **dip-shaving (100→~75)** and negative-space proof.
-4. **Reactive capability (major):** replaced `|Q|≤0.329·P` with the MVA-limited D-curve `Q_limit=min(33, √(105.3²−P²))` — full ±33 MVAR down to low P and **night STATCOM**; the `S_max=105.3 MVA` over-100-MVA headroom is explicitly credited to the **25 MVA BESS PCS** (platform reviewer's catch).
+3. **Oversold cloud-firming (blocker, two reviews):** signature `day_in_the_life` cloud shallowed to **G→~720** so Plant MW genuinely holds flat at 150; the deep **G→300** cloud is retained in `cloud_passing`/`low_soc` and reframed honestly as **dip-shaving (150→~89)** and negative-space proof.
+4. **Reactive capability (major):** replaced `|Q|≤0.329·P` with the MVA-limited D-curve `Q_limit=min(49.5, √(157.9²−P²))` — full ±49.5 MVAR down to low P and **night STATCOM**; the `S_max=157.9 MVA` over-150-MVA headroom is explicitly credited to the **37.5 MVA BESS PCS** (platform reviewer's catch).
 5. **PF night guard (physics):** PF forced to 1.00 when S<0.5 MVA (no 0/0 garbage at night).
 6. **inverter_efficiency (major, two reviews):** now from a **real part-load curve** (~98.5 %, sagging only below ~15–20 % load), not `P_ac/P_dc`; clipping stays exclusively in `clipping_loss_mw`.
 7. **Ride-through (physics):** modeled IEEE 1547-2018 / PRC-024 — `grid_under_frequency` is an indication, momentary cessation for deep dips, `breaker_trip` only on sustained/severe; Grid Hz dial **min lowered to 590** so the 59.3 Hz fault is visible.
@@ -377,16 +383,16 @@ Key changes made in response to the three adversarial reviews:
 11. **low_soc (minor):** scenario pre-drains to **SOC≤10** (the discharge-block floor) so the negative-space proof actually triggers; lamp stays an early-warning at ≤12.
 12. **Pipe direction (minor):** bound to `bess_status` (0/1/2), not the always-positive +50-offset `battery_power_mw`.
 13. **Unproven widgets (major, platform):** added explicit **verify-one-first gates** with proven `html_button`/static-recolor fallbacks for `svg-ext-pipe`, the control widgets, hand-authored proceng recolor, and `onpage` nav (previously only `html_bag` was gated).
-14. **One-line realism (minor):** added the **two-stage step-up** (inverter pad-mounts 0.6/34.5 kV → 34.5 kV collector → 34.5/115 kV main GSU) and moved the battery onto the **DC bus**.
+14. **One-line realism (minor):** added the **two-stage step-up** (inverter pad-mounts 0.69/34.5 kV → 34.5 kV collector → 34.5/100 kV main GSU) and moved the battery onto the **DC bus**.
 15. **inverter_trip narrative (minor, two reviews):** with DC-coupling, losing a block drops the **AC cap to 75 MW**, so the −25 MW step is genuinely visible on Plant MW (the battery can't exceed the reduced cap) — story is now honest, not self-cancelling.
 
-Praised elements kept unchanged: the PVWatts chain (NOCT 0.03125, γ_P −0.0037, derate 0.884, P_dc 110.5, clip to 100), RTE-on-both-legs bookkeeping (η_ow=√0.88), 0.25C / 3 h duration, register-space discipline, the +50/×10/×100 scaling conventions, `main_breaker_status` in INPUT, the integer-native-vs-scaled display split, full-replace project POST, chart Y-axis pinning, and the `variableId === plain tag.id` binding.
+Praised elements kept unchanged: the PVWatts chain (NOCT 0.03125, γ_P −0.0037, derate 0.884, P_dc 165.8, clip to 150), RTE-on-both-legs bookkeeping (η_ow=√0.88), 0.25C / 3 h duration, register-space discipline, the +50/×10/×100 scaling conventions, `main_breaker_status` in INPUT, the integer-native-vs-scaled display split, full-replace project POST, chart Y-axis pinning, and the `variableId === plain tag.id` binding.
 
 ---
 
 ## Addendum — as-built (changes since v2.0)
 
-The v2.0 spec above is accurate for the core PV/BESS physics, scenarios, and the three plant views. This addendum records what was **added or changed during the build** and supersedes the spec where they differ. Live point counts are now **78 total = 27 substation + 51 solar** (33 input / 9 holding / 9 discrete).
+The v2.0 spec above is accurate for the core PV/BESS physics, scenarios, and the three plant views. This addendum records what was **added or changed during the build** and supersedes the spec where they differ. Live point counts are now **81 total = 27 substation + 54 solar** (36 input / 9 holding / 9 discrete).
 
 ### A. Full 24 h day + operator time-of-day control
 - **`day_in_the_life` is a full 24 h day model** (was daylight-only), so it runs through a real **night** (G=0, inverters off, battery idle, trackers stowed) and wraps at midnight. The daylight arc is a 06:00–18:00 sine; a signature passing cloud sits at ~13:00. `T_DAY = 300 s` (a ~5-min demo day).

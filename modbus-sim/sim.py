@@ -2,7 +2,7 @@
 Two coupled digital twins on one Modbus TCP device + per-plant control API.
 
   - SLAVE 1  district-heating substation  (the proven reference build)
-  - SLAVE 2  "Sunfield Solar" 100 MWac utility-scale PV + DC-coupled BESS plant
+  - SLAVE 2  "Sunfield Solar" 150 MWac utility-scale PV + DC-coupled BESS plant
 
 Both run a 1 Hz coupled physics model so changes cascade realistically all the
 way to the FUXA dashboard. The solar model is the build-ready spec in
@@ -241,14 +241,14 @@ class Plant:
 
 
 # ===========================================================================
-# SLAVE 2 -- Sunfield Solar: 100 MWac PV + DC-coupled BESS  (spec v2.0)
+# SLAVE 2 -- Sunfield Solar: 150 MWac PV + DC-coupled BESS  (spec v2.0)
 # ===========================================================================
 
 # Measured / computed outputs -> INPUT registers (read-only). index per spec 2a.
 PV_INPUTS = {
     "plant_active_power_mw": 0,       # MW         x1
     "plant_reactive_power_mvar": 1,   # MVAR       +50 offset (17..83 = -33..+33)
-    "poi_voltage_kv": 2,              # kV         x10 (1150 = 115.0)
+    "poi_voltage_kv": 2,              # kV         x10 (1000 = 100.0)
     "grid_frequency_hz": 3,           # Hz         x10 (600 = 60.0)
     "power_factor": 4,                # -          x100 (98 = 0.98)
     "poi_current_a": 5,               # A          x1
@@ -280,14 +280,18 @@ PV_INPUTS = {
     "campus_load_mw": 30,             # MW         total campus load = base + substation
     "grid_power_mw": 31,              # MW         +100 offset; >100 export to grid / <100 import
     "solar_to_load_pct": 32,          # %          share of campus load met by the solar plant
+    # blocks 5-6 appended here (not 20-21) to keep every existing register index stable
+    "inverter5_status": 33,           # 0 off / 1 run / 2 fault
+    "inverter6_status": 34,
+    "feeder_current_a": 35,           # A   representative 34.5 kV feeder current (< 600 A by design)
 }
 
 # Operator setpoints / commands -> HOLDING registers (writable). RAW stored value
 # (what FUXA buttons + MCP write); engineering meaning in the comment. index, default.
 PV_HOLDING = {
-    "power_setpoint_mw": (0, 100),     # MW export cap / curtailment
+    "power_setpoint_mw": (0, 150),     # MW export cap / curtailment
     "mvar_setpoint": (1, 50),          # +50 offset -> default 0 MVAR
-    "voltage_setpoint_kv": (2, 1150),  # x10 -> 115.0 kV
+    "voltage_setpoint_kv": (2, 1000),  # x10 -> 100.0 kV
     "bess_mode": (3, 0),               # 0 auto / 1 force-charge / 2 force-discharge
     "bess_power_cmd_mw": (4, 50),      # +50 offset -> default 0 MW (force modes only)
     "breaker_cmd": (5, 1),             # 0 open / 1 close
@@ -323,19 +327,24 @@ PV_DISCRETE = {
 }
 
 # --- validated constants (PVWatts / NREL-grade), spec section 3 ---
-P_AC_RATED = 100.0    # MW
-P_DC_STC = 125.0      # MW  (ILR 1.25)
-N_INV = 4             # 25 MWac / 31.25 MWdc blocks
+P_AC_RATED = 150.0    # MW  (6 x 25 MWac blocks)
+P_DC_STC = 187.5      # MW  (ILR 1.25)
+N_INV = 6             # 25 MWac / 31.25 MWdc blocks, each with its own step-up transformer
 ETA_INV = 0.985
 GAMMA_P = -0.0037     # /degC  (-0.37 %/degC)
 NOCT_K = 0.03125      # (NOCT-20)/800, NOCT=45
-E_CAP = 100.0         # MWh
-P_BATT_MAX = 25.0     # MW (0.25C)
+E_CAP = 150.0         # MWh
+P_BATT_MAX = 37.5     # MW (0.25C)
 SOC_LO, SOC_HI = 10.0, 90.0
 ETA_OW = 0.938        # one-way = sqrt(RTE 0.88)
-S_MAX = 105.3         # MVA (inverter headroom + 25 MVA BESS PCS)
-Q_MAX = 33.0          # MVAR (0.95 PF at 100 MW)
-V_NOM = 115.0         # kV
+S_MAX = 157.9         # MVA (inverter headroom + 37.5 MVA BESS PCS)
+Q_MAX = 49.5          # MVAR (0.95 PF at 150 MW)
+V_NOM = 100.0         # kV  (POI / HV side of the main GSU)
+V_MID = 34.5          # kV  collection (mid) voltage: inverter-TX secondary / GSU LV
+V_LV = 0.69           # kV  inverter LV (690 V)
+N_FEEDERS = 6         # 34.5 kV feeders, each = one SCADA block
+INV_PER_FEEDER = 7    # 4 MVA inverters per feeder -> 7x4=28 MVA -> ~468 A < 600 A
+PER_INV_MVA = 4.0     # MVA  max per inverter (690 V), 42 total across the plant
 KV_PER_MVAR = 0.06    # kV/MVAR grid stiffness
 F_NOM = 60.0          # Hz
 DT = 1.0              # s
@@ -343,14 +352,16 @@ K_DECAY = 0.11        # firming-envelope decay (tau ~9 s): fast enough to TRACK 
                       # sunset (so the battery doesn't drain firming it) yet hold a fast passing cloud
 SOC_TC = 60.0         # demo time-lapse for SOC + energy: 1 sim-s shows 60 s of real battery
                       # dynamics, so SOC/MWh visibly move in a ~5-min demo day. The underlying
-                      # RATE is real (25 MW -> 3 h); divide by SOC_TC to recover it.
+                      # RATE is real (37.5 MW full 0.25C -> 3 h; 25 MW -> 4.5 h on the 150 MWh
+                      # pack); divide by SOC_TC to recover it.
 TH_GAIN = 0.002       # battery thermal: steady ~ambient+5+1 at full 0.25C
 TH_DECAY = 0.05
-T_DAY = 300.0         # day_in_the_life day length (s, ~5 min); ramp >> cloud (30 s)
+T_DAY = 300.0         # day_in_the_life day length (s, ~5 min); signature cloud ~15 sim-s
 SQRT3 = math.sqrt(3.0)
 
 # faults the solar plant understands (inject_fault keys)
 PV_FAULTS = ("inverter1", "inverter2", "inverter3", "inverter4",
+             "inverter5", "inverter6",
              "grid_under_freq", "grid_severe", "dc_ground_fault",
              "comms_loss", "battery_over_temp")
 
@@ -358,30 +369,30 @@ PV_FAULTS = ("inverter1", "inverter2", "inverter3", "inverter4",
 # mode that evolves irradiance / temperature / tracker over time. Applied over
 # the defaults; the driver mode is the scenario name unless given as "driver".
 PV_SCENARIOS = {
-    "normal": {"holding": {"power_setpoint_mw": 100, "mvar_setpoint": 50,
+    "normal": {"holding": {"power_setpoint_mw": 150, "mvar_setpoint": 50,
                            "bess_mode": 0, "breaker_cmd": 1, "tracker_enable": 1},
                "faults": {}},
-    "day_in_the_life": {"holding": {"power_setpoint_mw": 100, "mvar_setpoint": 50,
+    "day_in_the_life": {"holding": {"power_setpoint_mw": 150, "mvar_setpoint": 50,
                                     "bess_mode": 0, "breaker_cmd": 1, "tracker_enable": 1,
                                     "time_rate": 1}, "faults": {}},
     # sunrise / evening are the 24 h day started at dawn / late-afternoon (they
     # share the day_in_the_life model -- see apply_scenario), so they play.
-    "sunrise": {"holding": {"power_setpoint_mw": 100, "bess_mode": 0, "breaker_cmd": 1,
+    "sunrise": {"holding": {"power_setpoint_mw": 150, "bess_mode": 0, "breaker_cmd": 1,
                             "tracker_enable": 1, "time_rate": 1}, "faults": {}},
-    "evening": {"holding": {"power_setpoint_mw": 100, "bess_mode": 0, "breaker_cmd": 1,
+    "evening": {"holding": {"power_setpoint_mw": 150, "bess_mode": 0, "breaker_cmd": 1,
                             "tracker_enable": 1, "time_rate": 1}, "faults": {}},
-    "peak_sun": {"holding": {"power_setpoint_mw": 100, "bess_mode": 0,
+    "peak_sun": {"holding": {"power_setpoint_mw": 150, "bess_mode": 0,
                              "breaker_cmd": 1}, "faults": {}},
-    "cloud_passing": {"holding": {"power_setpoint_mw": 100, "bess_mode": 0,
+    "cloud_passing": {"holding": {"power_setpoint_mw": 150, "bess_mode": 0,
                                   "breaker_cmd": 1}, "faults": {}},
-    "curtailment": {"holding": {"power_setpoint_mw": 60, "bess_mode": 0,
+    "curtailment": {"holding": {"power_setpoint_mw": 90, "bess_mode": 0,
                                 "breaker_cmd": 1}, "faults": {}},
-    "inverter_trip": {"holding": {"power_setpoint_mw": 100, "bess_mode": 0,
+    "inverter_trip": {"holding": {"power_setpoint_mw": 150, "bess_mode": 0,
                                   "breaker_cmd": 1}, "faults": {"inverter2": True}},
     "grid_fault": {"holding": {"breaker_cmd": 1}, "faults": {"grid_under_freq": True}},
     "bess_dispatch": {"holding": {"bess_mode": 2, "bess_power_cmd_mw": 75,
                                   "breaker_cmd": 1}, "faults": {}},
-    "low_soc": {"holding": {"power_setpoint_mw": 100, "bess_mode": 0,
+    "low_soc": {"holding": {"power_setpoint_mw": 150, "bess_mode": 0,
                             "breaker_cmd": 1}, "faults": {}},
 }
 
@@ -405,15 +416,15 @@ class SolarPlant:
             "pv_dc_power_mw": 0.0, "inverter_ac_power_mw": 0.0, "clipping_loss_mw": 0.0,
             "inverter_efficiency_pct": 98.0, "tracker_angle_deg": 0.0,
             "plant_active_power_mw": 0.0, "plant_reactive_power_mvar": 0.0,
-            "poi_voltage_kv": 115.0, "grid_frequency_hz": 60.0, "power_factor": 1.0,
-            "poi_current_a": 0.0, "performance_ratio_pct": 0.0,
+            "poi_voltage_kv": 100.0, "grid_frequency_hz": 60.0, "power_factor": 1.0,
+            "poi_current_a": 0.0, "feeder_current_a": 0.0, "performance_ratio_pct": 0.0,
             "battery_soc_pct": 50.0, "battery_power_mw": 0.0, "battery_temp_c": 30.0,
             "daily_energy_mwh": 0.0, "P_ref": 0.0,
             "clock_hour": 10.0, "clock_min_tens": 0.0, "clock_min_ones": 0.0,
             "campus_base_load_mw": 20.0, "substation_load_mw": 5.0, "campus_load_mw": 25.0,
             "grid_power_mw": 0.0, "solar_to_load_pct": 0.0,
         }
-        self.statuses = {f"inverter{i}_status": 0 for i in range(1, 5)}
+        self.statuses = {f"inverter{i}_status": 0 for i in range(1, N_INV + 1)}
         self.statuses["bess_status"] = 0
         self.main_breaker_status = 1
         self.alarms = {k: False for k in PV_DISCRETE}
@@ -460,8 +471,9 @@ class SolarPlant:
                 angle = clamp(-60.0 + 120.0 * (hour - 6.0) / 12.0, -60.0, 60.0)
             else:                                       # night: dark + trackers stowed
                 day, G, angle = 0.0, 0.0, 0.0
-            if 12.85 <= hour <= 13.15:                  # signature passing cloud ~13:00 (~20 min)
-                G = min(G, 720.0)
+            if 12.4 <= hour <= 13.6:                    # signature passing cloud ~13:00 (~1.2 day-h ->
+                G = min(G, 720.0)                       # ~15 sim-s at time_rate=1, wide enough to
+                                                        # settle near 720 through the 0.2 irradiance lag)
             T_amb = 19.0 + 14.0 * day                   # ~19 degC overnight, ~33 midday
             return G, T_amb, angle
         if m in ("peak_sun", "curtailment"):
@@ -551,7 +563,7 @@ class SolarPlant:
         # (4) inverter statuses (need breaker) + cell temp + PV DC w/ derate
         inv_run = breaker_closed and G > 40.0
         n_ok = 0
-        for i in range(1, 5):
+        for i in range(1, N_INV + 1):
             if self.faults[f"inverter{i}"]:
                 self.statuses[f"inverter{i}_status"] = 2
             elif inv_run:
@@ -614,15 +626,20 @@ class SolarPlant:
             P_batt_dc *= 0.6
         s["battery_power_mw"] = lag(s["battery_power_mw"], P_batt_dc, 0.3)
 
-        # (6) inverter conversion + hard clip (PV + battery share the DC bus)
+        # (6) inverter conversion + hard clip (PV + battery share the DC bus). Two ceilings
+        # throttle the inverters: the hardware AC rating (ILR clip) and, when the operator
+        # curtails, the export setpoint -- a real plant curtails by commanding the inverters
+        # DOWN, so inverter_ac tracks what is actually exported+stored (no phantom AC).
         if breaker_closed:
             P_dc_net = P_dc_pv + P_batt_dc
             P_ac_cap = P_AC_RATED * (n_ok / N_INV)
             ac_unclamped = P_dc_net * ETA_INV
-            inv_ac = clamp(min(ac_unclamped, P_ac_cap), 0.0, P_AC_RATED)
-            clip = max(0.0, ac_unclamped - P_ac_cap)
+            eff_cap = min(P_ac_cap, h["power_setpoint_mw"])
+            inv_ac = clamp(min(ac_unclamped, eff_cap), 0.0, P_AC_RATED)
+            clip = max(0.0, ac_unclamped - P_ac_cap)                 # ILR hardware clip
+            curtail_pv = max(0.0, min(ac_unclamped, P_ac_cap) - h["power_setpoint_mw"])  # operator curtailment
         else:
-            inv_ac, clip = 0.0, 0.0
+            inv_ac, clip, curtail_pv = 0.0, 0.0, 0.0
         s["inverter_ac_power_mw"] = lag(s["inverter_ac_power_mw"], inv_ac, 0.2)
         s["clipping_loss_mw"] = lag(s["clipping_loss_mw"], clip, 0.2)
         load_frac = s["inverter_ac_power_mw"] / P_AC_RATED
@@ -630,8 +647,9 @@ class SolarPlant:
         s["inverter_efficiency_pct"] = clamp(eta_pl, 96.0, 99.0)
 
         # (7) SOC energy balance with RTE -- /3600 PRESERVED, x SOC_TC time-lapse -- + thermal.
-        # Real rate (SOC_TC=1): 25 MW discharge = 0.0074 %/s -> 80% usable in 3.0 h. The SOC_TC
-        # factor only speeds the DISPLAY so the swing is visible in a short demo; the 3 h is real.
+        # Real rate (SOC_TC=1) on the 150 MWh pack: 37.5 MW (full 0.25C) = 0.0074 %/s -> 80%
+        # usable in 3.0 h; 25 MW = 0.0049 %/s -> 4.5 h. The SOC_TC factor only speeds the
+        # DISPLAY so the swing is visible in a short demo; the underlying hours are real.
         if P_batt_dc > 0:
             soc -= (P_batt_dc / ETA_OW) * DT * SOC_TC / (3600.0 * E_CAP) * 100.0
         elif P_batt_dc < 0:
@@ -649,8 +667,9 @@ class SolarPlant:
         else:
             P_plant = 0.0
         s["plant_active_power_mw"] = lag(s["plant_active_power_mw"], P_plant, 0.2)
-        curtailing = (s["clipping_loss_mw"] > 0.5) and \
-            (soc >= SOC_HI or h["power_setpoint_mw"] < P_ac_pv_unclipped)
+        # real PV thrown away: operator curtailment (setpoint below available) OR the
+        # ILR hardware clip once the battery is full/blocked and can't absorb the surplus.
+        curtailing = (curtail_pv > 0.5) or (clip > 0.5)
         if self.mode == "day_in_the_life":   # "daily" energy only accrues over the simulated day
             s["daily_energy_mwh"] += s["plant_active_power_mw"] * DT * SOC_TC / 3600.0
 
@@ -665,6 +684,9 @@ class SolarPlant:
         hz1 = sl1.getValues(FC_INPUT, INPUTS["circ_pump1_hz"], count=1)[0]
         hz2 = sl1.getValues(FC_INPUT, INPUTS["circ_pump2_hz"], count=1)[0]
         hzm = sl1.getValues(FC_INPUT, INPUTS["makeup_pump_hz"], count=1)[0]
+        # affinity law P ~ Hz^3. NOTE: the ~3 MW/pump rating is DELIBERATELY oversized for
+        # demo visibility (a real district-heating circ pump moving ~3 MW_thermal is tens of
+        # kW) -- it makes the substation a legible ~3-6 MW load on the 10-28 MW campus bus.
         sub = 3.0 * (hz1 / 50.0) ** 3 + 3.0 * (hz2 / 50.0) ** 3 + 1.0 * (hzm / 50.0) ** 3
         s["campus_base_load_mw"] = lag(s["campus_base_load_mw"], base, 0.1)
         s["substation_load_mw"] = lag(s["substation_load_mw"], sub, 0.2)
@@ -681,13 +703,17 @@ class SolarPlant:
             Q = clamp(h["mvar_setpoint"], -Q_limit, Q_limit)
             s["plant_reactive_power_mvar"] = lag(s["plant_reactive_power_mvar"], Q, 0.2)
             # operator voltage-control setpoint sets the POI base voltage (default
-            # 115 kV = nominal); reactive dispatch deviates POI voltage around it.
+            # 100 kV = nominal); reactive dispatch deviates POI voltage around it.
             Vkv = h["voltage_setpoint_kv"] + KV_PER_MVAR * s["plant_reactive_power_mvar"] + v_off
             s["poi_voltage_kv"] = lag(s["poi_voltage_kv"], Vkv, 0.2)
             S = math.sqrt(Pp ** 2 + s["plant_reactive_power_mvar"] ** 2)
             s["power_factor"] = 1.0 if S < 0.5 else Pp / S
             s["poi_current_a"] = S * 1e6 / (SQRT3 * s["poi_voltage_kv"] * 1000.0) \
                 if s["poi_voltage_kv"] > 1.0 else 0.0
+            # representative 34.5 kV feeder current: plant apparent power split evenly
+            # across the N_FEEDERS collection feeders (7x4 MVA inverters each). Design
+            # target keeps this < 600 A -> ~468 A at full 168 MVA output.
+            s["feeder_current_a"] = (S / N_FEEDERS) * 1e6 / (SQRT3 * V_MID * 1000.0)
             # PR is a PV-ARRAY metric -> use PV-only AC (exclude BESS discharge,
             # which shares the inverters), else dispatch/sunset-lag reads a false 100%.
             pv_only_ac = min(P_dc_pv * ETA_INV, P_AC_RATED * (n_ok / N_INV))
@@ -697,6 +723,7 @@ class SolarPlant:
             s["poi_voltage_kv"] = lag(s["poi_voltage_kv"], V_NOM + v_off, 0.2)
             s["power_factor"] = 1.0
             s["poi_current_a"] = 0.0
+            s["feeder_current_a"] = 0.0
             s["performance_ratio_pct"] = 0.0
 
         # bess status
@@ -712,7 +739,7 @@ class SolarPlant:
         # (10) alarms
         v_pu = s["poi_voltage_kv"] / V_NOM
         self.alarms = {
-            "inverter_fault": any(self.statuses[f"inverter{i}_status"] == 2 for i in range(1, 5)),
+            "inverter_fault": any(self.statuses[f"inverter{i}_status"] == 2 for i in range(1, N_INV + 1)),
             "grid_over_voltage": v_pu > 1.05,
             "grid_under_frequency": s["grid_frequency_hz"] < 59.5,
             "breaker_trip": self.trip_latched,
@@ -734,6 +761,7 @@ class SolarPlant:
             "grid_frequency_hz": int(round(s["grid_frequency_hz"] * 10.0)),
             "power_factor": int(round(s["power_factor"] * 100.0)),
             "poi_current_a": int(round(s["poi_current_a"])),
+            "feeder_current_a": int(round(s["feeder_current_a"])),
             "main_breaker_status": int(self.main_breaker_status),
             "irradiance_wm2": int(round(s["irradiance_wm2"])),
             "pv_dc_power_mw": int(round(s["pv_dc_power_mw"])),
@@ -748,6 +776,8 @@ class SolarPlant:
             "inverter2_status": self.statuses["inverter2_status"],
             "inverter3_status": self.statuses["inverter3_status"],
             "inverter4_status": self.statuses["inverter4_status"],
+            "inverter5_status": self.statuses["inverter5_status"],
+            "inverter6_status": self.statuses["inverter6_status"],
             "battery_soc_pct": int(round(s["battery_soc_pct"])),
             "battery_power_mw": int(round(s["battery_power_mw"])) + 50,
             "battery_temp_c": int(round(s["battery_temp_c"])),
@@ -795,7 +825,7 @@ class SolarPlant:
         self.s["panel_temp_c"] = T0 + NOCT_K * G0
         self.s["tracker_angle_deg"] = ang0 if track else 0.0
         g_track = 1.0 if track else 0.97
-        n_ok0 = sum(1 for i in range(1, 5) if not self.faults[f"inverter{i}"]) \
+        n_ok0 = sum(1 for i in range(1, N_INV + 1) if not self.faults[f"inverter{i}"]) \
             if (brk == 1 and G0 > 40.0) else 0
         derate0 = 1.0 + GAMMA_P * (self.s["panel_temp_c"] - 25.0)
         gf = 0.85 if self.faults["dc_ground_fault"] else 1.0

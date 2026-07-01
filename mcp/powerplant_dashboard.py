@@ -1,5 +1,5 @@
 """
-Generate the FUXA dashboard for "Sunfield Solar" — a 100 MWac utility-scale PV +
+Generate the FUXA dashboard for "Sunfield Solar" — a 150 MWac utility-scale PV +
 DC-coupled BESS plant — and merge it into the live project ALONGSIDE the heating
 substation (POST /api/project is a full replace, so we keep both devices + all
 views).
@@ -50,11 +50,12 @@ DCCOL, ACCOL = "#5fa8ff", "#f0a23e"   # DC blue, AC amber
 # every power-plant point (for the device tags)
 POINTS = [
     "plant_active_power_mw", "plant_reactive_power_mvar", "poi_voltage_kv",
-    "grid_frequency_hz", "power_factor", "poi_current_a", "main_breaker_status",
+    "grid_frequency_hz", "power_factor", "poi_current_a", "feeder_current_a", "main_breaker_status",
     "irradiance_wm2", "pv_dc_power_mw", "inverter_ac_power_mw", "clipping_loss_mw",
     "inverter_efficiency_pct", "ambient_temp_c", "panel_temp_c", "tracker_angle_deg",
     "performance_ratio_pct", "inverter1_status", "inverter2_status",
-    "inverter3_status", "inverter4_status", "battery_soc_pct", "battery_power_mw",
+    "inverter3_status", "inverter4_status", "inverter5_status", "inverter6_status",
+    "battery_soc_pct", "battery_power_mw",
     "battery_temp_c", "bess_status", "daily_energy_mwh",
     "clock_hour", "clock_min_tens", "clock_min_ones",
     "campus_base_load_mw", "substation_load_mw", "campus_load_mw", "grid_power_mw",
@@ -367,21 +368,21 @@ C_MWIRR, C_FIRM, C_PQ, C_SOC, C_CAMPUS = "pp_mw_irr", "pp_firm", "pp_pq", "pp_so
 def build_site():
     v = View("v_site", "SunfieldCampus")
     v.text(28, 32, "SUNFIELD CAMPUS", 22, "#7CE0A0", "start", "bold")
-    v.text(248, 32, "solar + BESS microgrid  ·  district heating load  ·  115 kV grid tie", 13, SUB, "start")
+    v.text(248, 32, "solar + BESS microgrid  ·  district heating load  ·  100 kV grid tie", 13, SUB, "start")
     v.line(28, 44, 1252, 44, EDGE, 1)
     v.clock(800, 33)
     view_nav(v, "v_site")
 
     # --- KPI dial band: the campus energy balance at a glance ---
     dials = [
-        ("plant_active_power_mw", "gauge", 0, 110, "SOLAR GEN  MW",
-         [{"strokeStyle": GREEN, "min": 0, "max": 100}, {"strokeStyle": RED, "min": 100, "max": 110}],
-         [0, 50, 100]),
+        ("plant_active_power_mw", "gauge", 0, 160, "SOLAR GEN  MW",
+         [{"strokeStyle": GREEN, "min": 0, "max": 150}, {"strokeStyle": RED, "min": 150, "max": 160}],
+         [0, 75, 150]),
         ("campus_load_mw", "gauge", 0, 50, "CAMPUS LOAD  MW",
          [{"strokeStyle": AMBER, "min": 0, "max": 50}], [0, 25, 50]),
-        ("grid_power_mw", "zones", 0, 200, "GRID  ◄ IMPORT · EXPORT ►",
-         [{"strokeStyle": "#e08a3a", "min": 0, "max": 100}, {"strokeStyle": GREEN, "min": 100, "max": 200}],
-         [0, 100, 200]),
+        ("grid_power_mw", "zones", 0, 240, "GRID  ◄ IMPORT · EXPORT ►",
+         [{"strokeStyle": "#e08a3a", "min": 0, "max": 100}, {"strokeStyle": GREEN, "min": 100, "max": 240}],
+         [0, 120, 240]),
         ("solar_to_load_pct", "donut", 0, 100, "SOLAR SHARE  %",
          [{"strokeStyle": AMBER, "min": 0, "max": 60}, {"strokeStyle": GREEN, "min": 60, "max": 100}],
          [0, 50, 100]),
@@ -417,7 +418,7 @@ def build_site():
     v.text(560, 285, "CAMPUS BUS", 10, "#9fd0ff", "middle", "bold")
     # grid tie (up from the bus top)
     v.flow([(560, 300), (560, 256)], BLUE, 6, dur=1.6)
-    v.gridtower(560, 238, "115 kV GRID")
+    v.gridtower(560, 238, "100 kV GRID")
     v.box(610, 232, 150, 40, "#0e2433", "#2f6f9c", 1.2, 6)
     v.text(622, 248, "GRID", 10, SUB, "start", "bold")
     v.value(748, 256, "grid_power_mw", "", 16, GOLD, "end")
@@ -449,7 +450,7 @@ def build_site():
         v.value(x + 182, 538, p, u, 17, c, "end", src=src)
     # --- big full-width trend: generation vs campus load (+ grid exchange) ---
     v.text(28, 568, "GENERATION vs CAMPUS LOAD  ·  surplus exported / deficit imported", 12, "#9fd0ff", "start", "bold")
-    v.chart(24, 576, 1228, 212, C_CAMPUS, y1=(0, 110), y2=(0, 200))
+    v.chart(24, 576, 1228, 212, C_CAMPUS, y1=(0, 160), y2=(0, 240))
     return v
 
 
@@ -491,23 +492,23 @@ def inject_nav(view, here):
 def build_overview():
     v = View("v_power_plant", "SolarPlant")
     v.text(28, 32, "SUNFIELD SOLAR", 22, "#ffd479", "start", "bold")
-    v.text(232, 32, "100 MWac PV + 25 MW / 100 MWh DC-coupled BESS  ·  115 kV POI", 13, SUB, "start")
+    v.text(232, 32, "150 MWac PV + 37.5 MW / 150 MWh DC-coupled BESS  ·  100 kV POI", 13, SUB, "start")
     v.line(28, 44, 1252, 44, EDGE, 1)
     v.clock(800, 33)                              # live local time of day
     view_nav(v, "v_power_plant")
 
     # --- KPI dial band ---
     dials = [
-        ("plant_active_power_mw", "gauge", 0, 110, "PLANT  MW",
-         [{"strokeStyle": GREEN, "min": 0, "max": 100}, {"strokeStyle": RED, "min": 100, "max": 110}],
-         [0, 50, 100]),
+        ("plant_active_power_mw", "gauge", 0, 160, "PLANT  MW",
+         [{"strokeStyle": GREEN, "min": 0, "max": 150}, {"strokeStyle": RED, "min": 150, "max": 160}],
+         [0, 75, 150]),
         ("grid_frequency_hz", "zones", 590, 610, "GRID  Hz  (x10)",
          [{"strokeStyle": RED, "min": 590, "max": 595}, {"strokeStyle": AMBER, "min": 595, "max": 598},
           {"strokeStyle": GREEN, "min": 598, "max": 602}, {"strokeStyle": AMBER, "min": 602, "max": 605},
           {"strokeStyle": RED, "min": 605, "max": 610}], [590, 600, 610]),
-        ("poi_voltage_kv", "zones", 1090, 1210, "POI  kV  (x10)",
-         [{"strokeStyle": RED, "min": 1090, "max": 1120}, {"strokeStyle": GREEN, "min": 1120, "max": 1180},
-          {"strokeStyle": RED, "min": 1180, "max": 1210}], [1090, 1150, 1210]),
+        ("poi_voltage_kv", "zones", 950, 1050, "POI  kV  (x10)",
+         [{"strokeStyle": RED, "min": 950, "max": 970}, {"strokeStyle": GREEN, "min": 970, "max": 1030},
+          {"strokeStyle": RED, "min": 1030, "max": 1050}], [950, 1000, 1050]),
         ("irradiance_wm2", "gauge", 0, 1200, "IRRADIANCE  W/m²",
          [{"strokeStyle": "#6b5b2e", "min": 0, "max": 250}, {"strokeStyle": AMBER, "min": 250, "max": 650},
           {"strokeStyle": GOLD, "min": 650, "max": 1200}], [0, 600, 1200]),
@@ -536,11 +537,11 @@ def build_overview():
 
     # --- single-line (center band) ---
     yb = 330
-    v.text(28, 282, "SINGLE-LINE  ·  PV → INVERTERS → GSU → POI → GRID", 12, "#9fd0ff", "start", "bold")
+    v.text(28, 282, "SINGLE-LINE  ·  PV → 690 V INV → INV-TX → 34.5 kV FEEDER → MAIN GSU → 100 kV POI → GRID", 12, "#9fd0ff", "start", "bold")
     v.box(20, 292, 1240, 150, "#0b1d2b", "#19384e", 1.2, 8)
     v.sun(70, yb - 6, "irradiance_wm2", 16, "SUN")
     v.flow([(92, yb), (150, yb)], DCCOL, 6)                       # sun -> PV (light)
-    v.pvarray(152, yb - 28, 96, 56, "PV ARRAY 125 MWdc")
+    v.pvarray(152, yb - 28, 96, 56, "PV ARRAY 187.5 MWdc")
     v.flow([(248, yb), (320, yb)], DCCOL, 7)                      # PV DC bus
     # DC bus node + battery branch (DC-coupled)
     v.add(f'<circle cx="320" cy="{yb}" r="4" fill="{DCCOL}"/>')
@@ -549,17 +550,22 @@ def build_overview():
     v.battery(320, yb + 74, "bess_status", 46, 28, "BESS")
     v.value(320, yb + 112, "battery_power_mw", "", 12, INK, "middle")  # raw +50; see BESS view for signed
     v.flow([(320, yb), (392, yb)], DCCOL, 7)                      # DC to inverters
-    # inverter bank (4)
-    for i in range(4):
-        v.inverter(392 + 70 + i * 64, yb, f"inverter{i+1}_status", 28)
-    v.text(392 + 70 + 1.5 * 64, yb - 28, "INVERTERS  4 x 25 MW", 9, SUB, "middle")
-    xinv_end = 392 + 70 + 3 * 64 + 30
-    v.flow([(xinv_end, yb), (xinv_end + 60, yb)], ACCOL, 7)       # AC collector
-    v.transformer(xinv_end + 84, yb, "GSU 34.5/115kV")
-    v.flow([(xinv_end + 108, yb), (xinv_end + 168, yb)], ACCOL, 7)
-    v.breaker(xinv_end + 192, yb, "main_breaker_status", 26, "POI CB")
-    v.flow([(xinv_end + 210, yb), (xinv_end + 268, yb)], ACCOL, 7)
-    v.gridtower(xinv_end + 292, yb, "GRID 115kV")
+    # inverter bank (6) -- tighter spacing keeps the downstream GSU/POI layout put
+    for i in range(6):
+        v.inverter(392 + 70 + i * 40, yb, f"inverter{i+1}_status", 28)
+    v.text(392 + 70 + 2.5 * 40, yb - 28, "INVERTERS  6 feeders · 690 V", 9, SUB, "middle")
+    xinv_end = 392 + 70 + 5 * 40 + 30
+    # LEVEL 1 — inverter transformers 0.69/34.5 kV
+    v.flow([(xinv_end, yb), (xinv_end + 26, yb)], ACCOL, 6)
+    v.transformer(xinv_end + 48, yb, "INV TX 0.69/34.5")
+    v.flow([(xinv_end + 70, yb), (xinv_end + 128, yb)], ACCOL, 7)  # 34.5 kV feeder
+    v.value(xinv_end + 99, yb - 26, "feeder_current_a", "A", 10, GOLD, "middle")
+    # LEVEL 2 — main GSU 34.5/100 kV
+    v.transformer(xinv_end + 152, yb, "MAIN GSU 34.5/100")
+    v.flow([(xinv_end + 176, yb), (xinv_end + 236, yb)], ACCOL, 7)
+    v.breaker(xinv_end + 260, yb, "main_breaker_status", 26, "POI CB")
+    v.flow([(xinv_end + 278, yb), (xinv_end + 336, yb)], ACCOL, 7)
+    v.gridtower(xinv_end + 360, yb, "GRID 100kV")
     # POI MW chip
     v.box(xinv_end + 150, yb + 40, 150, 34, "#0e2433", "#2f6f9c", 1.2, 6)
     v.text(xinv_end + 162, yb + 54, "EXPORT", 9, SUB, "start", "bold")
@@ -580,19 +586,19 @@ def build_overview():
         v.text(ax + 30, yy, lab, 10, INK, "start")
 
     # --- signature trends (bottom) ---
-    v.text(28, 460, "PLANT MW vs IRRADIANCE  (DC climbs · AC clips flat at 100)", 11, "#9fd0ff", "start", "bold")
-    v.chart(24, 468, 510, 202, C_MWIRR, y1=(0, 120), y2=(0, 1200))
+    v.text(28, 460, "PLANT MW vs IRRADIANCE  (DC climbs · AC clips flat at 150)", 11, "#9fd0ff", "start", "bold")
+    v.chart(24, 468, 510, 202, C_MWIRR, y1=(0, 200), y2=(0, 1200))
     v.text(556, 460, "BESS FIRMING  ·  SOC (%) & Battery Power (MW +50)", 11, "#9fd0ff", "start", "bold")
-    v.chart(552, 468, 500, 202, C_FIRM, y1=(0, 100), y2=(25, 75))
+    v.chart(552, 468, 500, 202, C_FIRM, y1=(0, 100), y2=(10, 90))
 
     # --- operator presets (bottom strip) ---
     py = 672
     v.box(24, py, 1028, 118, PANEL, EDGE, 1.5, 8)
     v.text(40, py + 22, "OPERATOR CONTROLS", 12, "#9fd0ff", "start", "bold")
     v.text(40, py + 50, "Export Setpoint", 11, INK, "start")
-    for i, val in enumerate((40, 60, 80, 100)):
+    for i, val in enumerate((60, 90, 120, 150)):
         v.button(150 + i * 48, py + 38, 44, 22, f"{val}", "power_setpoint_mw", val,
-                 "#2e9e5b" if val == 100 else "#2d6cdf")
+                 "#2e9e5b" if val == 150 else "#2d6cdf")
     v.text(40, py + 82, "BESS Mode", 11, INK, "start")
     for i, (lab, val, col) in enumerate([("AUTO", 0, "#2e9e5b"), ("CHARGE", 1, "#2d6cdf"),
                                          ("DISCHG", 2, "#c0392b")]):
@@ -630,27 +636,32 @@ def build_oneline():
     # full single-line strip
     yb = 150
     v.box(20, 70, 1240, 150, "#0b1d2b", "#19384e", 1.2, 8)
-    v.pvarray(40, yb - 30, 92, 60, "PV 125 MWdc")
-    v.battery(186, yb, "bess_status", 44, 28, "DC BESS 25MW")
+    v.pvarray(40, yb - 30, 92, 60, "PV 187.5 MWdc")
+    v.battery(186, yb, "bess_status", 44, 28, "DC BESS 37.5MW")
     v.flow([(132, yb), (320, yb)], DCCOL, 7)
     v.add(f'<circle cx="186" cy="{yb-30}" r="3" fill="{DCCOL}"/>')
     v.flow([(186, yb - 14), (186, yb - 30), (320, yb - 30)], BLUE, 5, dur=1.6)
-    # inverter 2x2
-    for i in range(4):
-        cx, cy = 360 + (i % 2) * 56, yb - 18 + (i // 2) * 36
+    # inverter 2x3 (6 blocks) -- same horizontal footprint, one extra row
+    for i in range(6):
+        cx, cy = 360 + (i % 2) * 56, yb - 36 + (i // 2) * 36
         v.inverter(cx, cy, f"inverter{i+1}_status", 26)
-    v.text(388, yb - 44, "INVERTERS", 9, SUB, "middle")
+    v.text(388, yb - 58, "INVERTERS  ·  6 feeders · 690 V", 9, SUB, "middle")
     v.flow([(320, yb), (340, yb)], DCCOL, 7)
-    v.text(470, yb + 30, "34.5 kV COLLECTOR", 9, SUB, "middle")
-    v.flow([(444, yb), (560, yb)], ACCOL, 7)
-    v.transformer(590, yb, "GSU 34.5/115")
+    # LEVEL 1 — inverter transformers (0.69 / 34.5 kV) at each 4 MVA inverter
+    v.flow([(444, yb), (474, yb)], ACCOL, 6)
+    v.transformer(496, yb, "INV TX 0.69/34.5")
+    v.flow([(518, yb), (578, yb)], ACCOL, 7)
+    v.text(542, yb - 44, "34.5 kV FEEDER", 9, "#7CE0A0", "middle", "bold")
+    v.value(542, yb - 26, "feeder_current_a", "A  (<600)", 11, GOLD, "middle")
+    # LEVEL 2 — main GSU (34.5 / 100 kV)
+    v.transformer(590, yb, "MAIN GSU 34.5/100")
     v.flow([(614, yb), (700, yb)], ACCOL, 7)
     v.breaker(728, yb, "main_breaker_status", 28, "POI CB")
     v.flow([(748, yb), (840, yb)], ACCOL, 7)
     v.add(f'<circle cx="860" cy="{yb}" r="5" fill="{ACCOL}"/>')
-    v.text(860, yb - 22, "POI 115 kV", 9, SUB, "middle")
+    v.text(860, yb - 22, "POI 100 kV", 9, SUB, "middle")
     v.flow([(860, yb), (980, yb)], ACCOL, 7)
-    v.gridtower(1010, yb, "GRID")
+    v.gridtower(1010, yb, "GRID 100 kV")
 
     # big metering readouts
     mets = [("plant_active_power_mw", "ACTIVE POWER", "MW", GREEN, 34),
@@ -666,13 +677,13 @@ def build_oneline():
     # center-zero dials: MVAR, kV, PF
     v.box(28, 352, 600, 196, "#0c1f2e", "#1c3f57", 1.2, 8)
     v.text(44, 376, "POI ELECTRICAL", 12, "#9fd0ff", "start", "bold")
-    v.bag(40, 388, 180, 130, "plant_reactive_power_mvar", "zones", 17, 83,
-          zones=[{"strokeStyle": BLUE, "min": 17, "max": 50}, {"strokeStyle": GREEN, "min": 50, "max": 83}],
-          labels=[17, 50, 83])
-    v.text(130, 532, "MVAR  absorb ← 50 → export", 10, SUB, "middle")
-    v.bag(230, 388, 180, 130, "poi_voltage_kv", "zones", 1090, 1210,
-          zones=[{"strokeStyle": RED, "min": 1090, "max": 1120}, {"strokeStyle": GREEN, "min": 1120, "max": 1180},
-                 {"strokeStyle": RED, "min": 1180, "max": 1210}], labels=[1090, 1150, 1210])
+    v.bag(40, 388, 180, 130, "plant_reactive_power_mvar", "zones", 0, 100,
+          zones=[{"strokeStyle": BLUE, "min": 0, "max": 50}, {"strokeStyle": GREEN, "min": 50, "max": 100}],
+          labels=[0, 50, 100])
+    v.text(130, 532, "MVAR +50  absorb ← 50 → export  (±50 D-curve)", 10, SUB, "middle")
+    v.bag(230, 388, 180, 130, "poi_voltage_kv", "zones", 950, 1050,
+          zones=[{"strokeStyle": RED, "min": 950, "max": 970}, {"strokeStyle": GREEN, "min": 970, "max": 1030},
+                 {"strokeStyle": RED, "min": 1030, "max": 1050}], labels=[950, 1000, 1050])
     v.text(320, 532, "POI kV (x10)", 10, SUB, "middle")
     v.bag(420, 388, 180, 130, "power_factor", "gauge", 80, 100,
           zones=[{"strokeStyle": AMBER, "min": 80, "max": 95}, {"strokeStyle": GREEN, "min": 95, "max": 100}],
@@ -681,16 +692,16 @@ def build_oneline():
 
     # PQ-envelope chart
     v.text(648, 376, "PQ ENVELOPE  ·  POI Voltage & Reactive", 11, "#9fd0ff", "start", "bold")
-    v.chart(644, 384, 608, 202, C_PQ, y1=(1090, 1210), y2=(17, 83))
+    v.chart(644, 384, 608, 202, C_PQ, y1=(950, 1050), y2=(0, 100))
 
     # controls + alarms
     py = 596
     v.box(28, py, 600, 194, PANEL, EDGE, 1.5, 8)
     v.text(44, py + 24, "DISPATCH CONTROLS", 12, "#9fd0ff", "start", "bold")
     v.text(44, py + 54, "Export MW", 11, INK, "start")
-    for i, val in enumerate((40, 60, 80, 100)):
+    for i, val in enumerate((60, 90, 120, 150)):
         v.button(150 + i * 50, py + 42, 46, 22, f"{val}", "power_setpoint_mw", val,
-                 "#2e9e5b" if val == 100 else "#2d6cdf")
+                 "#2e9e5b" if val == 150 else "#2d6cdf")
     v.text(44, py + 90, "MVAR Set", 11, INK, "start")
     for i, (lab, raw) in enumerate([("-30", 20), ("-15", 35), ("0", 50), ("+15", 65), ("+30", 80)]):
         v.button(150 + i * 50, py + 78, 46, 22, lab, "mvar_setpoint", raw, "#7a4dd6")
@@ -725,7 +736,7 @@ def build_oneline():
 # ===========================================================================
 def build_bess():
     v = View("v_pp_bess", "SolarPlant_BESS")
-    v.text(28, 32, "BESS DETAIL  ·  25 MW / 100 MWh DC-COUPLED", 20, "#9fd0ff", "start", "bold")
+    v.text(28, 32, "BESS DETAIL  ·  37.5 MW / 150 MWh DC-COUPLED", 20, "#9fd0ff", "start", "bold")
     v.line(28, 44, 1252, 44, EDGE, 1)
     view_nav(v, "v_pp_bess")
 
@@ -742,10 +753,10 @@ def build_bess():
     # power dial + status
     v.box(428, 70, 410, 360, "#0c1f2e", "#1c3f57", 1.2, 8)
     v.text(444, 96, "BATTERY POWER  ·  charge ← 0 → discharge", 13, "#9fd0ff", "start", "bold")
-    v.bag(498, 116, 270, 200, "battery_power_mw", "zones", 25, 75,
-          zones=[{"strokeStyle": BLUE, "min": 25, "max": 50}, {"strokeStyle": GREEN, "min": 50, "max": 75}],
-          labels=[25, 50, 75], fs=26)
-    v.text(633, 332, "MW  (stored +50 :  25=−25  50=0  75=+25)", 10, SUB, "middle")
+    v.bag(498, 116, 270, 200, "battery_power_mw", "zones", 10, 90,
+          zones=[{"strokeStyle": BLUE, "min": 10, "max": 50}, {"strokeStyle": GREEN, "min": 50, "max": 90}],
+          labels=[10, 50, 90], fs=26)
+    v.text(633, 332, "MW  (stored +50 :  10=−40  50=0  90=+40)", 10, SUB, "middle")
     v.battery(560, 380, "bess_status", 60, 34)
     v.semaphore(660, 380, "low_soc", 9)
     v.text(678, 384, "LOW SOC", 10, INK, "start")
@@ -765,7 +776,7 @@ def build_bess():
 
     # SOC vs power trend
     v.text(28, 436, "SOC vs BATTERY POWER  ·  charges from the clip, discharges into a cloud", 12, "#9fd0ff", "start", "bold")
-    v.chart(24, 444, 1228, 234, C_SOC, y1=(0, 100), y2=(25, 75))
+    v.chart(24, 444, 1228, 234, C_SOC, y1=(0, 100), y2=(10, 90))
 
     # dispatch controls
     py = 686
@@ -776,7 +787,7 @@ def build_bess():
                                          ("FORCE DISCHARGE", 2, "#c0392b")]):
         v.button(100 + i * 130, py + 44, 124, 24, lab, "bess_mode", val, col)
     v.text(520, py + 56, "Power Cmd MW", 11, INK, "start")
-    for i, (lab, raw) in enumerate([("-25", 25), ("-10", 40), ("0", 50), ("+10", 60), ("+25", 75)]):
+    for i, (lab, raw) in enumerate([("-37", 13), ("-18", 32), ("0", 50), ("+18", 68), ("+37", 87)]):
         v.button(640 + i * 56, py + 44, 52, 24, lab, "bess_power_cmd_mw", raw, "#7a4dd6")
     v.text(980, py + 56, "Live MW (+50)", 11, SUB, "start")
     v.value(1130, py + 57, "battery_power_mw", "", 18, INK, "start")

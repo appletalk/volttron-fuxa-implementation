@@ -26,7 +26,7 @@ flowchart LR
         FEED["34.5 kV COLLECTION<br/>6 feeders × 7 × 4 MVA<br/>≈468 A < 600 A"]
         GSU["MAIN GSU<br/>34.5 / 100 kV"]
         BRK{"POI BREAKER<br/>main_breaker_status<br/>closed / open"}
-        POI["POI METERING<br/>100 kV · 60 Hz<br/>150 MWac · ±33 MVAR"]
+        POI["POI METERING<br/>100 kV · 60 Hz<br/>150 MWac · ±49.5 MVAR"]
     end
 
     GRID["⚡ GRID<br/>100 kV"]
@@ -109,7 +109,7 @@ flowchart LR
     PK["PEAK ~solar noon<br/>DC > 150 · AC pins at 150<br/>BESS charges from clip<br/>SOC ↑ · clipping_loss ≈ 0"]
     CL["SHALLOW CLOUD ~13:00<br/>PV sags ~20 MW<br/>BESS discharges → Plant MW holds 150<br/>SOC dips"]
     EV["EVENING ~18:00<br/>trackers 0→+60→stow<br/>BESS covers shoulder"]
-    N2["NIGHT<br/>STATCOM ±33 MVAR<br/>campus imports"]
+    N2["NIGHT<br/>STATCOM ±49.5 MVAR<br/>campus imports"]
 
     N1 --> SR --> PK --> CL --> EV --> N2 --> N1
 ```

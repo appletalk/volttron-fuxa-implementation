@@ -17,13 +17,13 @@ time-lapsed (`T_DAY ≈ 5 min` = 24 h).
 ---
 
 ## Pre-flight
-- Stack up (`docker compose up -d`, wait for 78 points) and dashboard pushed.
+- Stack up (`docker compose up -d`, wait for 81 points) and dashboard pushed.
 - `reset_sim(plant="power_plant")` + `load_scenario("peak_load", plant="heat_station")`
   (gives the campus a visible district-heating load).
 - Open the **Campus Overview** (landing/home view).
 
 ## 1 · Orient — *Campus Overview*
-> "One site, two coupled plants: a 100 MW solar + 25 MW/100 MWh BESS plant
+> "One site, two coupled plants: a 150 MW solar + 37.5 MW/150 MWh BESS plant
 > supplies a campus bus; the district-heating substation is an electrical load on
 > that same bus. Right now solar covers the whole campus and exports the surplus."
 
@@ -35,7 +35,7 @@ Watch: **Solar Gen / Campus Load / Grid (export)** dials, the energy-flow diagra
 - `load_scenario("day_in_the_life", plant="power_plant")`
 - `set_sim_point("time_set_hhmm", 1200, plant="power_plant")`
 
-Watch: clock → **12:00**; **DC climbs past 100, AC clips flat at 100**, the
+Watch: clock → **12:00**; **DC climbs past 150, AC clips flat at 150**, the
 DC-coupled battery banks the clip (charging, SOC rising), clip ≈ 0.
 
 > "Pause it… now jump to night."
@@ -59,7 +59,7 @@ dip**, SOC dips and recovers. The BESS-Firming / SOC-vs-Power trend tells it bes
 > "Trip an inverter block."
 - `inject_fault("inverter2", True, plant="power_plant")`
 
-Watch: inverter **#2 turns red**, `Inverter Fault` lamp, **Plant MW steps to ~75**,
+Watch: inverter **#2 turns red**, `Inverter Fault` lamp, **Plant MW steps down ~25 MW (to ~125)**,
 surplus PV charges the battery. Then: `inject_fault("inverter2", False, plant="power_plant")`.
 
 > "Grid under-frequency — the plant must *ride through*, not trip."
@@ -71,8 +71,9 @@ closed**, export continues.
 > "Now a severe, sustained excursion — protection opens the breaker."
 - `inject_fault("grid_severe", True, plant="power_plant")`
 
-Watch: ~3 s later the **breaker trips** (red gap), export → 0, `Breaker Trip` +
-`Grid Over-Voltage` lamps.
+Watch: ~7 s later the **breaker trips** (red gap), export → 0, `Breaker Trip` +
+`Grid Over-Voltage` lamps. (The Hz glides down for ~3–4 s to cross 58.5, then a 4 s
+sustained-excursion clock latches the trip — so budget ~7 s from the inject.)
 Recover: `reset_sim(plant="power_plant")`  *(clears the **latched** trip — a bare
 `breaker_cmd=1` will NOT re-close while the trip is latched).*
 
@@ -92,7 +93,7 @@ Grid export rises ~3 MW**. Restore: `inject_fault("circ_pump1", False, plant="he
 ## Quick reference
 - **power_plant scenarios:** `normal, day_in_the_life, sunrise, evening, peak_sun,
   cloud_passing, curtailment, inverter_trip, grid_fault, bess_dispatch, low_soc`
-- **power_plant faults:** `inverter1..4, grid_under_freq, grid_severe,
+- **power_plant faults:** `inverter1..6, grid_under_freq, grid_severe,
   dc_ground_fault, comms_loss, battery_over_temp`
 - **heat_station faults:** `circ_pump1, circ_pump2, makeup_pump, primary`
 - **Controls (`set_sim_point`, RAW values):** `power_setpoint_mw`, `mvar_setpoint`
@@ -100,5 +101,5 @@ Grid export rises ~3 MW**. Restore: `inject_fault("circ_pump1", False, plant="he
   `bess_power_cmd_mw` (+50), `breaker_cmd` (0/1), `tracker_enable` (0/1),
   `time_rate` (0 pause/1 play/N fast), `time_set_hhmm` (0000–2359; 9999 = no-op).
 - **Spare crowd-pleasers:** `bess_dispatch` (force +25 MW to the grid),
-  `curtailment` (cap export at 60 MW, surplus charges the BESS),
+  `curtailment` (cap export at 90 MW, surplus charges the BESS then curtails PV),
   `low_soc` (negative-space proof — depleted battery can't firm a cloud).

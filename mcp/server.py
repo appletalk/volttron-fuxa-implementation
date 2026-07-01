@@ -201,7 +201,7 @@ def correlate(output_point: str, input_point: str, values: list[float], settle_s
 # The sim hosts two plants on a per-plant control API
 # (POST /api/sim/<plant>/{scenario,fault,point,reset}, GET .../state):
 #   heat_station  district-heating substation (Modbus slave 1)  [default]
-#   power_plant   "Sunfield Solar" 100 MWac PV + DC-coupled BESS (slave 2)
+#   power_plant   "Sunfield Solar" 150 MWac PV + DC-coupled BESS (slave 2)
 PLANTS = ("heat_station", "power_plant")
 
 
@@ -215,7 +215,7 @@ def sim_state(plant: str = "heat_station") -> dict:
     alarm bits, active faults, and the available named scenarios.
 
     plant: 'heat_station' (district-heating substation) or 'power_plant'
-           (Sunfield Solar 100 MWac PV + BESS).
+           (Sunfield Solar 150 MWac PV + BESS).
     """
     path = _plant_path(plant, "state")
     if not path:
@@ -230,7 +230,7 @@ def inject_fault(component: str, on: bool = True, plant: str = "heat_station") -
 
     plant='heat_station' faults: 'circ_pump1' | 'circ_pump2' | 'makeup_pump' |
         'primary' (loss of the city heat main).
-    plant='power_plant' faults: 'inverter1'..'inverter4' (trip a block -> AC cap
+    plant='power_plant' faults: 'inverter1'..'inverter6' (trip a block -> AC cap
         drops 25 MW + alarm), 'grid_under_freq' (under-frequency ride-through
         indication, no trip), 'grid_severe' (sustained excursion -> breaker
         trips, export -> 0), 'dc_ground_fault', 'comms_loss', 'battery_over_temp'.
