@@ -17,3 +17,4 @@ pp-*.png
 site-model/build/*.glb
 site-model/build/*.dae
 tools/blendermcp-addon.py
+site-model/build/satellite.png
