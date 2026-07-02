@@ -25,10 +25,19 @@ change is required. Optionally document them in a future "site/civil" section:
 ## Divergences / liberties to revisit (backlog)
 - **GCR 0.32 is a pre-sweep engineering estimate** (latitude + industry LCOE band),
   not a simulated optimum. A PVsyst/SAM yield-vs-LCOE sweep would confirm the value.
-- **Unmapped natural drainage/coulee** crosses the north of the field — it is NOT in
-  OSM `waterway` data, so the mask doesn't exclude it and PV tables currently overlap
-  it. Options: hand-add the drainage polygon to the exclusion, or accept (demo). The
-  prominent mapped-scale watercourse to the west IS avoided (adjacent section).
+- **Creek/coulee (RESOLVED):** OSM has no waterway here; the coulee runs E-W across
+  the north of the section at local y ~ +700..+1100 m (georeferenced from the Google
+  pin overview + ESRI extent; verified on the satellite underlay). The OSM field's
+  "north edge" (y=+1300) was just the footprint box, over-extending past the section
+  into the creek. FIX: cap the plant's north boundary at y=+600 m (watercourse
+  setback) so it fills the section SOUTH of the creek. ~150-200 m open buffer to the
+  channel. Colour-based auto-detection failed (ESRI is a green-season capture with
+  almost no creek/field contrast).
+- **CAPACITY (open decision):** the creek-free section south of the cap is ~202 ha
+  gross -> ~55 ha module at GCR 0.32 -> **~116 MWdc / ~92 MWac**, NOT 150. To model
+  the full 150 MWac accurately the plant must span into the adjacent section south
+  of Township Rd 260 (real 150 MW plants span multiple parcels), OR the nameplate is
+  a liberty. Pending user direction.
 - Equipment counts/dimensions are representative massing, not a stamped GA drawing.
 
 ## Doc updates to consider (none required yet)

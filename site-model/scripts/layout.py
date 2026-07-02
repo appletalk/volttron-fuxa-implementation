@@ -24,12 +24,14 @@ from shapely.geometry import box as sbox, Point, LineString
 from shapely.ops import unary_union
 import geo
 
-# Creek/coulee traced from ESRI imagery (OSM has no waterway here) -- local metres,
-# winding E-W across the north field. Buffered as a no-build exclusion + its banks.
-MANUAL_WATER = [[(-792, 1074), (-655, 952), (-501, 975), (-317, 1028), (-118, 1051),
-                 (35, 967), (219, 868), (419, 837), (603, 860), (832, 875),
-                 (1062, 852), (1246, 860)]]
-WATER_BUFFER = 75.0
+# The creek/coulee runs E-W across the north of the section -- georeferenced from
+# the Google pin overview + the ESRI extent to local y ~ +700..+1100 m (right where
+# the north township line sits: Township Rd 260 is at y=-710, +1 mile ~= +900). OSM
+# has no waterway for it, and the field's OSM "north edge" (y=+1300) was just the
+# footprint box, over-extending past the section into the creek. So instead of
+# threading panels through a meander we can't detect reliably, cap the plant's north
+# boundary with a realistic watercourse setback and fill the section SOUTH of it.
+NORTH_CAP = 600.0
 from PIL import Image, ImageDraw
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -226,6 +228,8 @@ def met_mast(x, y, P, h=62):
 def main():
     cell = geo.build()["anchor_cell"]
     plantable = cell.buffer(-FENCE_SETBACK)
+    _pb = plantable.bounds                                   # cap north edge S of the creek
+    plantable = plantable.intersection(sbox(_pb[0] - 1, _pb[1] - 1, _pb[2] + 1, NORTH_CAP))
     b = plantable.bounds
     cx = (b[0] + b[2]) / 2.0
     cym = (b[1] + b[3]) / 2.0
@@ -236,9 +240,8 @@ def main():
     xr1, xr2 = b[0] + (b[2]-b[0])/3.0, b[0] + 2*(b[2]-b[0])/3.0
     roads_geom = unary_union([sbox(xr1-4, b[1], xr1+4, b[3]), sbox(xr2-4, b[1], xr2+4, b[3]),
                               sbox(b[0], cym-4, b[2], cym+4), sbox(cx-4, b[1], cx+4, b[3])])
-    creek = unary_union([LineString(w).buffer(WATER_BUFFER) for w in MANUAL_WATER])
     pv_area = (plantable.difference(comp.buffer(12)).difference(roads_geom.buffer(2))
-               .difference(pond.buffer(10)).difference(creek))
+               .difference(pond.buffer(10)))
 
     P = []
 
