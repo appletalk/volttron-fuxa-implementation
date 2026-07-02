@@ -64,6 +64,8 @@ MATS = {
     "insulator":   [0.78, 0.53, 0.28],
     "bus":         [0.80, 0.82, 0.85],
     "switchgear":  [0.58, 0.60, 0.63],
+    "combiner":    [0.30, 0.36, 0.44],
+    "dc_cable":    [0.12, 0.12, 0.14],
     "road":        [0.54, 0.50, 0.44],
     "gravel":      [0.47, 0.44, 0.39],
     "fence":       [0.33, 0.34, 0.37],
@@ -311,6 +313,19 @@ def fill_field(fb, ncols, nrows, P, comp=None, pond=None):
                 ix = bx0 + 22 + (k + 0.5) * (bx1 - bx0 - 44) / 7.0
                 inverter_skid(ix, ay + 7, P)                  # skid right beside the E-W service road
             battery_cluster((bx0+bx1)/2 - 14, ay - 52, P)     # battery on the spur
+            # DC collection: AERIAL TRUNK BUS (not buried -- poor prairie-soil ampacity;
+            # trunk-bus tap connectors must stay accessible) + recombiner boxes -> the
+            # block's central inverters, where the DC-coupled battery's DC/DC also ties in.
+            for k in range(4):                                # recombiners, S side of the service road
+                P.append(bx("combiner", (2.2, 1.6, 2.2),
+                            (bx0 + 70 + k*(bx1-bx0-140)/3.0, ay - 8, 1.1), (0, 0, 0), "combiner"))
+            postx = bx0 + 30                                  # messenger posts along the row
+            while postx < bx1 - 30:
+                P.append(bx("dc_post", (0.12, 0.12, 3.4), (postx, ay - 4, 1.7), (0, 0, 0), "steel"))
+                postx += 45
+            for zc in (3.0, 3.15, 3.3):                       # 3-conductor aerial DC trunk bus
+                P.append(bx("dc_trunk", (bx1 - bx0 - 40, 0.06, 0.06),
+                            ((bx0+bx1)/2, ay - 4, zc), (0, 0, 0), "dc_cable"))
     return n
 
 
