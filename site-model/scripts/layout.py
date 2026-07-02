@@ -20,9 +20,16 @@ import json
 import math
 import os
 
-from shapely.geometry import box as sbox, Point
+from shapely.geometry import box as sbox, Point, LineString
 from shapely.ops import unary_union
 import geo
+
+# Creek/coulee traced from ESRI imagery (OSM has no waterway here) -- local metres,
+# winding E-W across the north field. Buffered as a no-build exclusion + its banks.
+MANUAL_WATER = [[(-792, 1074), (-655, 952), (-501, 975), (-317, 1028), (-118, 1051),
+                 (35, 967), (219, 868), (419, 837), (603, 860), (832, 875),
+                 (1062, 852), (1246, 860)]]
+WATER_BUFFER = 75.0
 from PIL import Image, ImageDraw
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -229,7 +236,9 @@ def main():
     xr1, xr2 = b[0] + (b[2]-b[0])/3.0, b[0] + 2*(b[2]-b[0])/3.0
     roads_geom = unary_union([sbox(xr1-4, b[1], xr1+4, b[3]), sbox(xr2-4, b[1], xr2+4, b[3]),
                               sbox(b[0], cym-4, b[2], cym+4), sbox(cx-4, b[1], cx+4, b[3])])
-    pv_area = plantable.difference(comp.buffer(12)).difference(roads_geom.buffer(2)).difference(pond.buffer(10))
+    creek = unary_union([LineString(w).buffer(WATER_BUFFER) for w in MANUAL_WATER])
+    pv_area = (plantable.difference(comp.buffer(12)).difference(roads_geom.buffer(2))
+               .difference(pond.buffer(10)).difference(creek))
 
     P = []
 
