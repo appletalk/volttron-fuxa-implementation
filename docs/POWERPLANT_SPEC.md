@@ -20,6 +20,8 @@ Files touched (per handoff §2):
 > **Uprate note (v2.1, reconciled v2.3).** The plant was sized up from the original 100 MWac / 4-block design to **150 MWac / 6 blocks** (BESS scaled ×1.5 to 37.5 MW / 150 MWh). The nameplate table, constants, and the derived sanity figures below **now reflect the 150 MW / 100 kV plant** (peak DC ~166 MW, clips at 150, cloud-sag ~89). Any residual "×1.5" narrative equals the old 100 MW value × 1.5.
 >
 > **Topology note (v2.2).** Reorganized into an explicit **two-level step-up**: inverter LV **690 V** → inverter transformers → **34.5 kV** collection feeders → **main GSU** → **100 kV POI** (was 115 kV). The 6 SCADA blocks are now **feeders** (7 × 4 MVA inverters each, ≈468 A < 600 A by design). New point `feeder_current_a` (idx 35); POI nominal 100 kV (`poi_voltage_kv`/`voltage_setpoint_kv` store 1000). Old "34.5/115 kV" / "115 kV POI" prose below is superseded.
+>
+> **Inverter note (v2.4).** The physical inverter is now specified: **33 × SMA Sunny Central 4600 UP-US** (4.6 MVA, 690 V, 1500 Vdc, CEC η 98.5 %), one per **MVPS-S2** station (inverter + 690 V/34.5 kV MV transformer + MV vacuum breaker). The 6 SCADA "blocks/feeders" now carry **5–6 stations each** (≈462 A < 600 A). 33 × 4.6 = 151.8 MVA installed (POI capped 150); at 187.5 MWdc that's 5.68 MWdc/inverter ≈ 4735 A @ 1200 V MPP, right at the inverter's 4750 A I_DC,max. **DC collection:** single-pole fusing (CEC 2024) into **28 of each inverter's 32 single-pole inputs (4 spare)**, 315 A fuse, ~300 kcmil Al aerial trunks. (A DC-cable takeoff showed embiggening combiners does NOT pay on this **aerial** plant — copper string homeruns dominate and lengthen as combiners sparsen; 18-input is worst, 24-vs-32 is ±1–4%. More/smaller/closer combiners win.) The SCADA point model (6 blocks of 25 MWac, `inverter1..6_status`) is unchanged — it abstracts the feeders, not individual stations. **Storage:** the sim/spec keep the **DC-coupled** BESS; an **AC-coupled** 34.5 kV storage yard is the preferred economics (AESO ancillary services) and is a deferred re-architecture — see `docs/SAM_HANDOFF.md` and `site-model/SPEC_ALIGNMENT.md`.
 
 | Property | Value |
 |---|---|
@@ -27,7 +29,7 @@ Files touched (per handoff §2):
 | DC array (STC) | **187.5 MWdc** (ILR = 1.25) |
 | Inverter blocks | **6 × 25 MWac** (31.25 MWdc each) |
 | BESS | **37.5 MW / 150 MWh**, **DC-coupled**, usable SOC 10–90 %, RTE 0.88 (η_ow 0.938) |
-| Collection (two-level) | inverter LV **690 V** → **34.5 kV** feeder (inverter transformers) → **100 kV** POI (main GSU); **6 feeders × 7 × 4 MVA**, ≈468 A < 600 A |
+| Collection (two-level) | inverter LV **690 V** → **34.5 kV** feeder (inverter transformers) → **100 kV** POI (main GSU); **6 feeders × 5–6 × SC4600 UP-US (4.6 MVA)**, ≈462 A < 600 A |
 | Step-up / POI | **100 kV**, 60.0 Hz |
 | Reactive envelope | **±49.5 MVAR** (0.95 PF at 150 MW), MVA-limited D-curve `S_max = 157.9 MVA` (inverter headroom **+ 37.5 MVA BESS PCS**); STATCOM at night |
 | Trackers | single-axis ±60° |

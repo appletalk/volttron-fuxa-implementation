@@ -21,9 +21,9 @@ flowchart LR
     end
 
     subgraph AC["AC side"]
-        INV["6× INVERTER BLOCKS<br/>25 MWac / 31.25 MWdc each<br/>clips flat at 150 MW · η ≈ 98.5%<br/>inverter1..6_status"]
+        INV["6× INVERTER BLOCKS (feeders)<br/>33 × SMA SC4600 UP-US on MVPS-S2<br/>25 MWac/block · clips flat at 150 MW · CEC η 98.5%<br/>inverter1..6_status"]
         XFMR["Inverter transformers<br/>690 V → 34.5 kV"]
-        FEED["34.5 kV COLLECTION<br/>6 feeders × 7 × 4 MVA<br/>≈468 A < 600 A"]
+        FEED["34.5 kV COLLECTION<br/>6 feeders × 5–6 × SC4600 UP<br/>≈462 A < 600 A"]
         GSU["MAIN GSU<br/>34.5 / 100 kV"]
         BRK{"POI BREAKER<br/>main_breaker_status<br/>closed / open"}
         POI["POI METERING<br/>100 kV · 60 Hz<br/>150 MWac · ±49.5 MVAR"]

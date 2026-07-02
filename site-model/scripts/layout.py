@@ -2,12 +2,19 @@
 """Phase-2 accurate plant layout for Sunfield Solar (engineer-reviewed).
 
 Electrical architecture matches the FUXA spec's single-line:
-  PV 187.5 MWdc -> 42 x 4 MVA central inverters (690 V), 6 power blocks of 7,
-  DC-COUPLED BESS (37.5 MW / 150 MWh) as battery containers + DC/DC converters
-  on each block's inverter DC bus (NOT an AC-coupled yard), each inverter with a
-  690 V/34.5 kV pad transformer -> 6 x 34.5 kV collector feeders (~469 A) ->
-  main substation: 34.5 kV switchgear -> 2 x GSU 34.5/100 kV -> 100 kV bus,
-  breakers, dead-end gantry -> POI -> 100 kV transmission take-off line.
+  PV 187.5 MWdc -> 33 x SMA Sunny Central 4600 UP-US (4.6 MVA, 690 V) central
+  inverters, each on an MVPS-S2 station (inverter + 690 V/34.5 kV MV transformer +
+  MV vacuum breaker), 6 collection feeders of 5-6 stations (<=6x4.6=27.6 MVA ->
+  ~462 A < 600 A). DC collection: single-pole fused string trunks (CEC 2024) into
+  28 of the inverter's 32 single-pole inputs, 4 spare (315 A fuse, ~300 kcmil Al aerial
+  trunk). A cable takeoff (SPEC_ALIGNMENT.md) showed MORE/smaller/closer combiners beat
+  fewer big ones here -- aerial collection (no trench) means copper string homeruns
+  dominate, so don't embiggen for a cable saving.
+  BESS (37.5 MW / 150 MWh) shown as DC-coupled battery containers + DC/DC on each
+  block's inverter DC bus -- NOTE: an AC-coupled 34.5 kV storage yard is the preferred
+  economics (AESO ancillary services); that re-architecture is a deferred follow-up.
+  6 x 34.5 kV collector feeders -> main substation: 34.5 kV switchgear -> 2 x GSU
+  34.5/100 kV -> 100 kV bus, breakers, dead-end gantry -> POI -> 100 kV take-off line.
 
 Plus the real-site elements: perimeter security fence, access road to the public
 road with a gatehouse, O&M compound + parking, met mast, stormwater pond.
@@ -104,10 +111,12 @@ def fence_along(polygon, P, height=2.1, thick=0.1, mat="fence", simplify=4.0):
 
 # ----------------------------------------------------------- power block unit
 def inverter_skid(x, y, P):
-    """4 MVA central inverter (690 V) + its 690 V/34.5 kV pad transformer."""
-    P.append(bx("inverter", (5.0, 2.5, 2.6), (x, y, 1.3), (0, 0, 0), "inverter"))
-    P.append(bx("inv_tx", (2.6, 2.2, 2.4), (x + 4.2, y, 1.2), (0, 0, 0), "transformer"))
-    P.append(bx("inv_pad", (10, 4, 0.1), (x + 1.5, y, 0.05), (0, 0, 0), "gravel"))
+    """SMA Sunny Central 4600 UP-US on an MVPS-S2 station: 4.6 MVA inverter cabinet
+    (690 V) + 690 V/34.5 kV MV transformer + MV vacuum breaker cubicle, on one pad."""
+    P.append(bx("inverter", (6.1, 2.4, 2.6), (x, y, 1.3), (0, 0, 0), "inverter"))       # SC4600 UP cabinet
+    P.append(bx("inv_tx", (3.0, 2.4, 2.6), (x + 4.8, y, 1.3), (0, 0, 0), "transformer"))  # MV transformer
+    P.append(bx("mv_brk", (1.8, 2.0, 2.4), (x + 7.4, y, 1.2), (0, 0, 0), "switchgear"))   # MV breaker
+    P.append(bx("inv_pad", (12, 4, 0.1), (x + 2.2, y, 0.05), (0, 0, 0), "gravel"))
 
 
 def battery_cluster(x, y, P, n_cont=6):
@@ -118,17 +127,6 @@ def battery_cluster(x, y, P, n_cont=6):
         P.append(bx("bess", (2.6, 12.2, 2.9), (x + i*4.4, y + 6, 1.45), (0, 0, 0), "bess"))
     for i in range(2):                      # DC/DC converter skids
         P.append(bx("dcdc", (3.0, 2.6, 2.6), (x + 4 + i*8, y - 5, 1.3), (0, 0, 0), "dcdc"))
-
-
-def power_block(x0, x1, y0, y1, pv_area, P):
-    """One 25 MWac block: 7 distributed inverter skids + a DC-coupled battery cluster."""
-    for k in range(7):
-        ix = x0 + 20 + (k + 0.5) * (x1 - x0 - 40) / 7.0
-        iy = y0 + (0.40 if k % 2 else 0.62) * (y1 - y0)
-        if not pv_area.contains(Point(ix, iy)):
-            iy = (y0 + y1) / 2
-        inverter_skid(ix, iy, P)
-    battery_cluster((x0 + x1)/2 - 14, (y0 + y1)/2, P)   # block battery near its centre
 
 
 # ------------------------------------------------------------- 100 kV station
@@ -249,7 +247,7 @@ def feeder_roads(fb, P):
                         sbox(x0, yc-4, x1, yc+4)])
 
 
-def fill_field(fb, ncols, nrows, P, comp=None, pond=None):
+def fill_field(fb, ncols, nrows, P, comp=None, pond=None, block_inv=None):
     """Fill one road-bounded parcel with a full internal ACCESS ROAD network so
     every inverter/battery skid has service access:
       - N-S collector roads on the block-column boundaries,
@@ -303,21 +301,28 @@ def fill_field(fb, ncols, nrows, P, comp=None, pond=None):
                 n += 1
                 yy += tlen + TABLE_GAP
         x += PITCH
-    # inverter skids ON the service roads + battery clusters on their spurs
+    # inverter skids ON the service roads + battery clusters on their spurs. Each block
+    # (feeder) carries block_inv[cell] SC4600 UP-US stations (5 or 6 -> 33 total).
+    cell = 0
     for ci in range(ncols):
         for ri in range(nrows):
             bx0 = x0 + ci * W / ncols
             bx1 = x0 + (ci+1) * W / ncols
             ay = ays[ri]
-            for k in range(7):
-                ix = bx0 + 22 + (k + 0.5) * (bx1 - bx0 - 44) / 7.0
-                inverter_skid(ix, ay + 7, P)                  # skid right beside the E-W service road
+            n_inv = block_inv[cell] if block_inv else 6
+            cell += 1
+            for k in range(n_inv):
+                ix = bx0 + 22 + (k + 0.5) * (bx1 - bx0 - 44) / n_inv
+                inverter_skid(ix, ay + 7, P)                  # MVPS station beside the E-W service road
             battery_cluster((bx0+bx1)/2 - 14, ay - 52, P)     # battery on the spur
             # DC collection: AERIAL TRUNK BUS (not buried -- poor prairie-soil ampacity;
-            # trunk-bus tap connectors must stay accessible) + recombiner boxes -> the
-            # block's central inverters, where the DC-coupled battery's DC/DC also ties in.
-            for k in range(4):                                # recombiners, S side of the service road
-                P.append(bx("combiner", (2.2, 1.6, 2.2),
+            # trunk-bus tap connectors must stay accessible) + string-trunk recombiners:
+            # single-pole fused string trunks (CEC 2024) land 28 of each inverter's 32
+            # single-pole inputs (4 spare, 315 A fuse, ~300 kcmil Al). A cable takeoff favours
+            # MORE/smaller/closer combiners on this aerial plant (copper homeruns dominate),
+            # so representative massing = several modest recombiners, NOT a few embiggened ones.
+            for k in range(4):                                # recombiners, S of the service road
+                P.append(bx("combiner", (2.4, 1.7, 2.2),
                             (bx0 + 70 + k*(bx1-bx0-140)/3.0, ay - 8, 1.1), (0, 0, 0), "combiner"))
             postx = bx0 + 30                                  # messenger posts along the row
             while postx < bx1 - 30:
@@ -341,8 +346,9 @@ def main():
     pond = Point(E_x - 70, NF[2] + 80).buffer(55)
 
     P = []
-    n_tab = fill_field(NF, 2, 2, P, pond=pond)           # 4 blocks / 28 inverters
-    n_tab += fill_field(SF, 2, 1, P, comp=comp)          # 2 blocks / 14 inverters -> 42 total
+    # 33 SC4600 UP-US stations over 6 feeders: north 4 feeders [6,6,6,5], south 2 [5,5].
+    n_tab = fill_field(NF, 2, 2, P, pond=pond, block_inv=[6, 6, 6, 5])   # 4 feeders / 23 stations
+    n_tab += fill_field(SF, 2, 1, P, comp=comp, block_inv=[5, 5])        # 2 feeders / 10 -> 33 total
 
     _, gantry = substation(ncx - 100, SOUTH_TOP - 235, 200, 225, P)
     # 100 kV line exits WEST along the Township Rd 260 corridor to the Hwy 9 grid tie
@@ -365,8 +371,10 @@ def main():
     json.dump(out, open(os.path.join(BUILD, "plan.json"), "w"))
     render((W_x - 40, SOUTH_CAP - 40, E_x + 40, NORTH_CAP + 40), comp, P,
            os.path.join(BUILD, "plan_layout.png"))
-    print("PV tables: %d | total prims: %d | tilt %.0f | two parcels (N creek-capped + S band)"
-          % (n_tab, len(P), math.degrees(TILT)))
+    n_inv = sum(1 for p in P if p["name"] == "inverter")
+    print("PV tables: %d | inverters: %d SC4600 UP (%.1f MVA installed) | total prims: %d | "
+          "tilt %.0f | two parcels (N creek-capped + S band)"
+          % (n_tab, n_inv, n_inv * 4.6, len(P), math.degrees(TILT)))
     print("wrote build/plan.json and build/plan_layout.png")
 
 

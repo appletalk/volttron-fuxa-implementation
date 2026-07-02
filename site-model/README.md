@@ -35,7 +35,7 @@ holds the converter + geo toolkit (trimesh, pycollada, shapely, Pillow).
 ## Contents (parametric off the plant spec)
 
 428 PV rows (1P single-axis, N–S torque tube, GCR 0.32 / 7.2 m pitch, clipped to the field) ·
-6 block inverter/transformer stations · substation compound (2× GSU, 100 kV POI gantry, control building) ·
+33 × SMA Sunny Central 4600 UP-US on MVPS-S2 stations (6 feeders of 5–6) · substation compound (2× GSU, 100 kV POI gantry, control building) ·
 BESS yard (36 containers) · coupled district-heating substation + campus buildings · met mast · access roads.
 
 Anchor/heading and every plant dimension are parameters — see the constants at the top of `layout.py`.

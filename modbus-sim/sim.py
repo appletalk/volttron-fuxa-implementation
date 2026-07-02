@@ -343,8 +343,10 @@ V_NOM = 100.0         # kV  (POI / HV side of the main GSU)
 V_MID = 34.5          # kV  collection (mid) voltage: inverter-TX secondary / GSU LV
 V_LV = 0.69           # kV  inverter LV (690 V)
 N_FEEDERS = 6         # 34.5 kV feeders, each = one SCADA block
-INV_PER_FEEDER = 7    # 4 MVA inverters per feeder -> 7x4=28 MVA -> ~468 A < 600 A
-PER_INV_MVA = 4.0     # MVA  max per inverter (690 V), 42 total across the plant
+INV_PER_FEEDER = 6    # max SC4600 UP per feeder (some carry 5); 33 stations / 6 feeders
+                      # -> <=6x4.6=27.6 MVA/feeder -> ~462 A < 600 A by design
+PER_INV_MVA = 4.6     # MVA  SMA Sunny Central 4600 UP-US per inverter (690 V), one per
+                      # MVPS-S2 station; 33 total -> 151.8 MVA installed (POI capped 150)
 KV_PER_MVAR = 0.06    # kV/MVAR grid stiffness
 F_NOM = 60.0          # Hz
 DT = 1.0              # s
@@ -711,8 +713,8 @@ class SolarPlant:
             s["poi_current_a"] = S * 1e6 / (SQRT3 * s["poi_voltage_kv"] * 1000.0) \
                 if s["poi_voltage_kv"] > 1.0 else 0.0
             # representative 34.5 kV feeder current: plant apparent power split evenly
-            # across the N_FEEDERS collection feeders (7x4 MVA inverters each). Design
-            # target keeps this < 600 A -> ~468 A at full 168 MVA output.
+            # across the N_FEEDERS collection feeders (avg ~5.5 x SC4600 UP each). Design
+            # target keeps this < 600 A -> ~441 A at full 157.9 MVA (S_MAX) output.
             s["feeder_current_a"] = (S / N_FEEDERS) * 1e6 / (SQRT3 * V_MID * 1000.0)
             # PR is a PV-ARRAY metric -> use PV-only AC (exclude BESS discharge,
             # which shares the inverters), else dispatch/sunset-lag reads a false 100%.

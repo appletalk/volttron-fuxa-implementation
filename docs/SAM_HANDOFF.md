@@ -37,7 +37,7 @@ Source of truth: `docs/POWERPLANT_SPEC.md` (physics), `site-model/scripts/layout
 | AC rating (POI) | **150 MWac** | — (derived from DC / DCAC) |
 | DC array (STC) | **187.5 MWdc** | `system_capacity = 187500` kW |
 | ILR (DC:AC) | **1.25** | `dc_ac_ratio = 1.25` |
-| Inverters | 42 x ~4 MVA central, **η = 98.5%** | `inv_eff = 98.5` / CEC inverter |
+| Inverters | **33 × SMA Sunny Central 4600 UP-US** (4600 kVA @ 35 °C, 690 V AC, 1500 Vdc, I_DC,max 4750 A, **CEC η 98.5 %**), one per MVPS-S2 station → 34.5 kV | `inv_eff = 98.5`, or model the datasheet inverter (Paco 4.6 MW, Vdcmax 1500, Vdcmp ~1200) |
 | Tracker | **1P single-axis, N-S axis, ±60°, BACKTRACKING** | `array_type = 3` (1-axis backtrack) |
 | Axis tilt / azimuth | 0° axis tilt, 180° axis azimuth (N-S) | `tilt = 0`, `azimuth = 180` |
 | GCR | **0.32** (7.2 m pitch, ~2.3 m module) | `gcr = 0.32` |
@@ -47,7 +47,7 @@ Source of truth: `docs/POWERPLANT_SPEC.md` (physics), `site-model/scripts/layout
 | Bifaciality | ~0.70 (snow albedo boosts winter) | `bifaciality = 0.7` |
 | Ground albedo | 0.2 base; **raise for snow months** (~0.6-0.8 Dec-Mar) | monthly albedo |
 | System losses | soiling/mismatch/DC+AC wiring/availability (~14% default; snow-soiling notable) | `losses` / detailed loss tree |
-| BESS (optional) | **37.5 MW / 150 MWh, DC-coupled, RTE 0.88** | Battery model (DC-connected) |
+| BESS (optional) | **37.5 MW / 150 MWh, RTE 0.88** — coupling under review, **AC-coupled preferred** (AESO ancillary-service revenue » DC clip recovery); model as AC-connected | Battery model (AC-connected) |
 
 **Note on AC capacity factor + the battery:** AC CF = annual AC energy at POI /
 (150 MW × 8760). Standard AC CF is a **PV-only** metric; the DC-coupled battery
@@ -67,9 +67,10 @@ we want the delivered/firmed profile.
    array_type 3, gcr 0.32, tilt 0, azimuth 180, inv_eff 98.5, bifaciality 0.7, losses
    ~14%, monthly albedo (snow). Run → `annual_energy`, `capacity_factor` (AC).
 3b. **Model B — Pvsamv1 (detailed, authoritative):** pick a bifacial CEC module
-    (~660 Wp) + central inverter (~4 MVA) from the CEC DB; subarray1 = 1-axis with
-    backtracking, gcr 0.32, bifacial on; module count / string sizing to ~187.5 MWdc;
-    inverter count to 150 MWac. Run → annual AC energy, AC capacity factor, specific
+    (~660 Wp) + the **SMA Sunny Central 4600 UP-US** inverter (4.6 MVA, from the CEC DB
+    if present, else the Inverter Datasheet model: Paco 4.6e6 W, Vdcmax 1500, η 98.5 %);
+    subarray1 = 1-axis with backtracking, gcr 0.32, bifacial on; module count / string
+    sizing to ~187.5 MWdc; **33 inverters** → 150 MWac. Run → annual AC energy, AC CF, specific
     yield (kWh/kWp), PR, clipping/curtailment loss, monthly production.
 4. **(Optional) Battery case:** add the DC-coupled 37.5 MW / 150 MWh battery, dispatch
    for peak-shaving/firming; report delivered profile + round-trip losses.
@@ -90,7 +91,8 @@ Write it as `site-model/scripts/sam_model.py` (PySAM) + save results to
 3. **Weather: try `DEMO_KEY` first** for the NSRDB PSM3 pull; if throttled, fall back
    to a user-provided free NREL key or a manually downloaded PSM3 TMY.
 4. **Module/inverter (Pvsamv1):** pick a representative bifacial CEC module (~660 Wp)
-   + a central inverter (~4 MVA) from the CEC DB; refine only if the CF looks off.
+   + the **SMA Sunny Central 4600 UP-US** (4.6 MVA, 33 units; CEC DB or datasheet model);
+   refine only if the CF looks off.
 
 ### First actions on resume
 1. `site-model/.venv/bin/pip install NREL-PySAM`; `python -c "import PySAM; print(PySAM.__version__)"`.
@@ -103,6 +105,48 @@ single-axis + bifacial at 51.2°N with ILR 1.25 (clipping raises AC CF; high lat
 winter limits it). Specific yield likely ~1300-1500 kWh/kWp/yr.
 
 ---
+
+## Inverter update (2026-07-01): SMA Sunny Central 4600 UP-US on MVPS-S2
+
+The plant now specifies a **real inverter**: the **SMA Sunny Central 4600 UP-US**, one
+per **MV Power Station (MVPS-S2)** skid (inverter + 690 V/34.5 kV MV transformer + MV
+vacuum breaker). Datasheets:
+`SC4xxxUP-DS-en_us-39.pdf`, `MVPS-S2-SC40-46-UP-US-DS-en_us-30.pdf`.
+
+**Inverter facts that matter for SAM:**
+- Nominal AC **4600 kVA @ 35 °C** (4140 kVA @ 50 °C — hot-day derate), **690 V** AC
+  (matches the plant's 690 V LV), I_AC,nom 3850 A.
+- DC: **max 1500 V**, MPP 1003–1325 V (top clamps 1050 V @ 50 °C), **I_DC,max 4750 A**,
+  I_SC 8400 A. **CEC efficiency 98.5 %** (max 98.9 %). PF 1.0, adj. 0.8 OE↔0.8 UE.
+- **Count: 33 stations** → 151.8 MVA installed (POI capped at 150 MWac). At 187.5 MWdc
+  that's **5.68 MWdc/inverter ≈ 4735 A @ 1200 V MPP — right at the 4750 A I_DC,max**, so
+  187.5 MWdc is about the max DC these 33 units should carry. ILR 1.25 at the 150 MW POI
+  cap (1.235 on installed inverters).
+- SAM: model as the datasheet inverter (Paco 4.6e6 W, Vdcmax 1500, Vdcmp ~1200, η 98.5 %),
+  33 units → 150 MWac; DC 187.5 MWdc unchanged. If Pvsamv1's inverter DB lacks the exact
+  SC4600 UP-US, use the Inverter Datasheet model with those numbers.
+
+**DC input / combiner design (determined via cable takeoff):** single-pole DC fusing is
+permitted (CEC 2024; long-standing IEC/EU practice), so all **32 single-pole inputs** are
+usable, and with **AC-coupled** storage (below) the SC4600 UPs are **PV-only** (no battery
+DC inputs). Design point: **populate 28 of 32 single-pole PV inputs, 4 spare** (~203 kW/input,
+~169 A op, 315 A fuse, ~300 kcmil Al aerial trunk) — clear of the 630 A fuse / 2×800 kcmil
+limits, with O&M spares at negligible copper penalty. **A DC-cable takeoff (2026-07-01, in
+`site-model/SPEC_ALIGNMENT.md`) reversed an earlier "24 of 32 / 8 spare" call:** embiggening
+combiners does NOT save money on this plant — the collection is **aerial trunk-bus (no
+trench)**, so the usual reason to embiggen is absent, and copper string homeruns dominate and
+*lengthen* as combiners sparsen. 18-input is always the most expensive; 24 vs 28–32 is within
+±1–4% (estimating noise); more/smaller/closer combiners minimize copper. Hence ~28–32, not 24.
+
+**Storage coupling (flagged, not yet propagated):** DC-coupled storage is a weak economic
+play here — clipping recovery on an ILR-1.25 plant is a few % of annual energy, whereas an
+**AC-coupled** BESS earns AESO ancillary services (contingency/regulating reserve) **plus**
+arbitrage and dispatches independent of PV. **Preferred: AC-coupled** 37.5 MW / 150 MWh on
+the 34.5 kV bus (SMA offers the SCS-UP-US storage variant of this same platform). This does
+**not** change the PV-only AC capacity factor SAM reports; it only changes how the battery
+case is modeled (AC-connected). **NOTE:** the running SCADA sim, `docs/POWERPLANT_SPEC.md`,
+and the 3D model are still **DC-coupled** — re-architecting them to AC-coupled is a separate,
+larger task (see the open question in the session that logged this).
 
 ## Pointers
 - Physics constants + sanity numbers: `docs/POWERPLANT_SPEC.md` (§3, and the "numbers

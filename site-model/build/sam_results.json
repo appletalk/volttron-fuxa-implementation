@@ -1,0 +1,134 @@
+{
+  "site": {
+    "lat": 51.18978,
+    "lon": -113.66769,
+    "elevation_m": 961,
+    "location": "Wheatland County, AB"
+  },
+  "plant": {
+    "dc_stc_mw": 187.5,
+    "ac_poi_mw": 150.0,
+    "ilr": 1.25,
+    "gcr": 0.32,
+    "tracker": "1-axis N-S backtracking +/-60deg",
+    "inverter": "33 x SMA Sunny Central 4600 UP-US",
+    "bifaciality": 0.7
+  },
+  "by_weather_source": {
+    "PVGIS-NSRDB": {
+      "weather_file": "build/tmy.csv",
+      "pvwatts_v8": {
+        "annual_ac_kwh": 338531684.86767,
+        "capacity_factor_ac_pct": 25.76344633696119,
+        "capacity_factor_dc_pct": 20.61075706956895,
+        "specific_yield_kwh_per_kwdc": 1805.50231929424,
+        "ac_monthly_kwh": [
+          10769150.942350537,
+          20361070.72162357,
+          30503189.17722917,
+          41533259.45972095,
+          40996086.13700074,
+          39209352.31886037,
+          42774665.14556451,
+          41218100.33479782,
+          28964032.1047406,
+          21018919.889840517,
+          11956037.877756028,
+          9227820.758185944
+        ]
+      },
+      "pvsamv1": {
+        "dc_stc_kw": 187505.688888,
+        "modules_per_string": 28,
+        "nstrings": 10143,
+        "module_count": 284004,
+        "module_wp": 660.222,
+        "inverter_count": 33,
+        "inverter_paco_kw": 4600.0,
+        "annual_ac_kwh": 345407353.4070217,
+        "capacity_factor_ac_pct": 26.286708782878364,
+        "capacity_factor_dc_pct": 21.028728999187713,
+        "specific_yield_kwh_per_kwdc": 1842.1166603288434,
+        "performance_ratio": 0.8672649646384014,
+        "clipping_loss_pct": 2.1451520772166672,
+        "mppt_window_clip_pct": 0.039575154372437506,
+        "ac_monthly_kwh": [
+          10393113.83815784,
+          19662994.008080676,
+          30295703.178946026,
+          42210610.539233215,
+          42254271.75136872,
+          40653782.854502976,
+          44184871.25683169,
+          42542395.81845331,
+          30242089.28070583,
+          22004692.11451468,
+          12104103.697543345,
+          8858725.068664705
+        ]
+      }
+    },
+    "ERA5-2016": {
+      "weather_file": "build/tmy_era5.csv",
+      "pvwatts_v8": {
+        "annual_ac_kwh": 309625076.1803221,
+        "capacity_factor_ac_pct": 23.563552220724667,
+        "capacity_factor_dc_pct": 18.85084177657973,
+        "specific_yield_kwh_per_kwdc": 1651.3337396283844,
+        "ac_monthly_kwh": [
+          9445575.327762771,
+          16912608.253359005,
+          28893626.220822413,
+          35696103.32413266,
+          39313429.42591515,
+          44411980.160617165,
+          40337631.32478262,
+          35018239.65360207,
+          27059814.623561457,
+          14583339.392954012,
+          9916527.299276104,
+          8036201.17353567
+        ]
+      },
+      "pvsamv1": {
+        "dc_stc_kw": 187505.688888,
+        "modules_per_string": 28,
+        "nstrings": 10143,
+        "module_count": 284004,
+        "module_wp": 660.222,
+        "inverter_count": 33,
+        "inverter_paco_kw": 4600.0,
+        "annual_ac_kwh": 319073844.1305714,
+        "capacity_factor_ac_pct": 24.282636539617307,
+        "capacity_factor_dc_pct": 19.4255198471245,
+        "specific_yield_kwh_per_kwdc": 1701.6755386081063,
+        "performance_ratio": 0.877300730242081,
+        "clipping_loss_pct": 0.4912593258500492,
+        "mppt_window_clip_pct": 0.02991011860385749,
+        "ac_monthly_kwh": [
+          9112545.453422187,
+          16302281.147532247,
+          28801745.677778497,
+          36967849.626154006,
+          40759822.79037413,
+          46381936.278840415,
+          42361548.18971545,
+          36765180.87583671,
+          28456763.024700403,
+          15417226.980867697,
+          10033621.573408067,
+          7713322.511930329
+        ]
+      }
+    }
+  },
+  "headline": {
+    "ac_capacity_factor_pct_range": [
+      23.6,
+      26.3
+    ],
+    "ac_capacity_factor_pct_primary": 26.29,
+    "primary_basis": "Pvsamv1 / PVGIS-NSRDB TMY",
+    "specific_yield_kwh_per_kwdc_primary": 1842
+  }
+}
