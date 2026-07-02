@@ -32,6 +32,13 @@ import geo
 # threading panels through a meander we can't detect reliably, cap the plant's north
 # boundary with a realistic watercourse setback and fill the section SOUTH of it.
 NORTH_CAP = 600.0
+# Two-parcel plant: the creek-capped north section + a band of the section south of
+# Township Rd 260 (y=-710), sized to reach ~150 MWac total without hitting the south
+# wetland/farmsteads. Roads: RR272/Hwy9 x=-813 (W), RR271 x=+800 (E), south township
+# line ~ -2319. Corridor left open across Township Rd 260.
+TR260_Y = -710.0
+SOUTH_TOP = -820.0        # north edge of south array (100 m setback S of Township Rd 260)
+SOUTH_CAP = -1520.0       # south edge of south array (tops the plant up to ~150 MWac)
 from PIL import Image, ImageDraw
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -225,88 +232,134 @@ def met_mast(x, y, P, h=62):
 
 
 # ------------------------------------------------------------------- layout
-def main():
-    cell = geo.build()["anchor_cell"]
-    plantable = cell.buffer(-FENCE_SETBACK)
-    _pb = plantable.bounds                                   # cap north edge S of the creek
-    plantable = plantable.intersection(sbox(_pb[0] - 1, _pb[1] - 1, _pb[2] + 1, NORTH_CAP))
-    b = plantable.bounds
-    cx = (b[0] + b[2]) / 2.0
-    cym = (b[1] + b[3]) / 2.0
-    ymin = b[1]
+def fbox(fb):
+    return sbox(fb[0], fb[2], fb[1], fb[3])              # (x0,x1,y0,y1) -> shapely box
 
-    comp = sbox(cx - 120, ymin + 6, cx + 130, ymin + 240)        # substation + O&M (no AC BESS yard now)
-    pond = Point(b[2] - 70, b[1] + 70).buffer(55).intersection(plantable)
-    xr1, xr2 = b[0] + (b[2]-b[0])/3.0, b[0] + 2*(b[2]-b[0])/3.0
-    roads_geom = unary_union([sbox(xr1-4, b[1], xr1+4, b[3]), sbox(xr2-4, b[1], xr2+4, b[3]),
-                              sbox(b[0], cym-4, b[2], cym+4), sbox(cx-4, b[1], cx+4, b[3])])
-    pv_area = (plantable.difference(comp.buffer(12)).difference(roads_geom.buffer(2))
-               .difference(pond.buffer(10)))
 
-    P = []
+def feeder_roads(fb, P):
+    x0, x1, y0, y1 = fb
+    xr1, xr2 = x0 + (x1-x0)/3.0, x0 + 2*(x1-x0)/3.0
+    yc = (y0 + y1)/2.0
+    for xr in (xr1, xr2):
+        P.append(bx("road_feeder", (7, y1-y0, 0.08), (xr, yc, 0.04), (0, 0, 0), "road"))
+    P.append(bx("road_ew", (x1-x0, 7, 0.08), ((x0+x1)/2, yc, 0.04), (0, 0, 0), "road"))
+    return unary_union([sbox(xr1-4, y0, xr1+4, y1), sbox(xr2-4, y0, xr2+4, y1),
+                        sbox(x0, yc-4, x1, yc+4)])
 
-    # PV field
-    n_tab = 0
-    x = b[0] + CHORD
-    while x < b[2]:
-        strip = sbox(x - CHORD/2, b[1], x + CHORD/2, b[3]).intersection(pv_area)
+
+def fill_field(fb, ncols, nrows, P, comp=None, pond=None):
+    """Fill one road-bounded parcel with a full internal ACCESS ROAD network so
+    every inverter/battery skid has service access:
+      - N-S collector roads on the block-column boundaries,
+      - an E-W service road along each block row's inverter line (skids sit on it),
+      - a short spur to each block's DC-coupled battery cluster.
+    PV tracker rows are then clipped to everything (roads, comp, pond)."""
+    x0, x1, y0, y1 = fb
+    W, H = x1 - x0, y1 - y0
+    rg = []
+    # N-S collector roads (internal column boundaries)
+    for ci in range(1, ncols):
+        xc = x0 + ci * W / ncols
+        P.append(bx("road_ns", (6, H, 0.08), (xc, (y0+y1)/2, 0.04), (0, 0, 0), "road"))
+        rg.append(sbox(xc-3, y0, xc+3, y1))
+    # E-W service road along each block-row inverter line
+    ays = []
+    for ri in range(nrows):
+        ay = y0 + (ri + 0.5) * H / nrows
+        ays.append(ay)
+        P.append(bx("road_svc", (W, 5, 0.07), ((x0+x1)/2, ay, 0.035), (0, 0, 0), "road"))
+        rg.append(sbox(x0, ay-8, x1, ay+11))                 # corridor for the skids on it
+    # battery-cluster access spurs (one per block)
+    for ci in range(ncols):
+        for ri in range(nrows):
+            scx = x0 + (ci + 0.5) * W / ncols
+            ay = ays[ri]
+            P.append(bx("road_spur", (5, 52, 0.07), (scx, ay-28, 0.035), (0, 0, 0), "road"))
+            rg.append(sbox(scx-3, ay-54, scx+3, ay))
+            rg.append(sbox(scx-22, ay-64, scx+22, ay-40))     # battery pad clearing
+    roads = unary_union(rg)
+    pv = fbox(fb).difference(roads.buffer(2))
+    if pond is not None:
+        pv = pv.difference(pond.buffer(10))
+    if comp is not None:
+        pv = pv.difference(comp.buffer(12))
+    # PV rows
+    n = 0
+    x = x0 + CHORD
+    while x < x1:
+        strip = sbox(x - CHORD/2, y0, x + CHORD/2, y1).intersection(pv)
         for p in parts(strip):
             if p.area < CHORD * 15:
                 continue
             pb = p.bounds
-            y, ye = pb[1], pb[3]
-            while y < ye - 12:
-                tlen = min(TABLE_LEN, ye - y)
+            yy, ye = pb[1], pb[3]
+            while yy < ye - 12:
+                tlen = min(TABLE_LEN, ye - yy)
                 if tlen < 12:
                     break
-                P.append(bx("pv", (CHORD, tlen-0.6, 0.05), (x, y+tlen/2, PANEL_Z), (0, TILT, 0), "panel"))
-                n_tab += 1
-                y += tlen + TABLE_GAP
+                P.append(bx("pv", (CHORD, tlen-0.6, 0.05), (x, yy+tlen/2, PANEL_Z), (0, TILT, 0), "panel"))
+                n += 1
+                yy += tlen + TABLE_GAP
         x += PITCH
+    # inverter skids ON the service roads + battery clusters on their spurs
+    for ci in range(ncols):
+        for ri in range(nrows):
+            bx0 = x0 + ci * W / ncols
+            bx1 = x0 + (ci+1) * W / ncols
+            ay = ays[ri]
+            for k in range(7):
+                ix = bx0 + 22 + (k + 0.5) * (bx1 - bx0 - 44) / 7.0
+                inverter_skid(ix, ay + 7, P)                  # skid right beside the E-W service road
+            battery_cluster((bx0+bx1)/2 - 14, ay - 52, P)     # battery on the spur
+    return n
 
-    # 6 power blocks: distributed inverters + DC-coupled battery clusters
-    xedges = [b[0], xr1, xr2, b[2]]
-    yedges = [b[1], cym, b[3]]
-    for ci in range(3):
-        for ri in range(2):
-            power_block(xedges[ci], xedges[ci+1], yedges[ri], yedges[ri+1], pv_area, P)
 
-    # substation + transmission take-off (line exits south to the public road)
-    _, gantry = substation(cx - 95, ymin + 14, 200, 210, P)
-    transmission_line((cx - 8, gantry - 2), (0.0, -1.0), P, spans=3, span=60)
+def main():
+    W_x, E_x = -785.0, 780.0                             # RR272/Hwy9 (W) .. RR271 (E), inside setback
+    NF = (W_x, E_x, TR260_Y + 22, NORTH_CAP)             # north parcel (Township Rd 260 -> creek cap)
+    SF = (W_x, E_x, SOUTH_CAP, SOUTH_TOP)                # south parcel (band S of Township Rd 260)
+    ncx = (W_x + E_x) / 2.0
 
-    # O&M, gatehouse (site entrance from the public road), met mast, pond
-    om_compound(cx + 45, ymin + 20, P)
-    gatehouse(cx, cell.bounds[1] + 20, P)
-    met_mast(b[0] + 55, b[3] - 55, P)
-    for pg in parts(pond):
-        if pg.geom_type == "Polygon":
-            pbnd = pg.bounds
-            P.append(bx("pond", (pbnd[2]-pbnd[0], pbnd[3]-pbnd[1], 0.1),
-                        ((pbnd[0]+pbnd[2])/2, (pbnd[1]+pbnd[3])/2, 0.05), (0, 0, 0), "water"))
+    # shared substation at the north edge of the south parcel (adjacent to Township
+    # Rd 260 for line access; both parcels' 34.5 kV feeders collect here)
+    comp = sbox(ncx - 150, SOUTH_TOP - 250, ncx + 150, SOUTH_TOP)
+    pond = Point(E_x - 70, NF[2] + 80).buffer(55)
 
-    # roads
-    P.append(bx("road_ns", (7, b[3]-b[1], 0.08), (cx, cym, 0.04), (0, 0, 0), "road"))
-    P.append(bx("road_ew", (b[2]-b[0], 7, 0.08), (cx, cym, 0.04), (0, 0, 0), "road"))
-    for xr in (xr1, xr2):
-        P.append(bx("road_feeder", (7, b[3]-b[1], 0.08), (xr, cym, 0.04), (0, 0, 0), "road"))
-    P.append(bx("road_entrance", (8, 90, 0.08), (cx, cell.bounds[1] + 40, 0.04), (0, 0, 0), "road"))
+    P = []
+    n_tab = fill_field(NF, 2, 2, P, pond=pond)           # 4 blocks / 28 inverters
+    n_tab += fill_field(SF, 2, 1, P, comp=comp)          # 2 blocks / 14 inverters -> 42 total
 
-    fence_along(plantable, P)
+    _, gantry = substation(ncx - 100, SOUTH_TOP - 235, 200, 225, P)
+    # 100 kV line exits WEST along the Township Rd 260 corridor to the Hwy 9 grid tie
+    transmission_line((ncx + 40, TR260_Y - 35), (-1.0, 0.0), P, spans=4, span=185)
+    om_compound(ncx + 70, SOUTH_TOP - 210, P)
+    gatehouse(ncx, TR260_Y + 4, P)                       # entrance off Township Rd 260
+    met_mast(W_x + 55, NORTH_CAP - 55, P)
+    pb = pond.bounds
+    P.append(bx("pond", (pb[2]-pb[0], pb[3]-pb[1], 0.1),
+                ((pb[0]+pb[2])/2, (pb[1]+pb[3])/2, 0.05), (0, 0, 0), "water"))
+    # N-S spine road through both parcels (crosses the Township Rd 260 corridor)
+    P.append(bx("road_spine", (7, NORTH_CAP - SOUTH_CAP, 0.08),
+                (ncx, (SOUTH_CAP + NORTH_CAP)/2, 0.04), (0, 0, 0), "road"))
+
+    fence_along(fbox(NF), P)
+    fence_along(fbox(SF), P)
 
     out = {"anchor": [geo.ANCHOR_LAT, geo.ANCHOR_LON], "mats": MATS, "prims": P,
            "tilt_deg": round(math.degrees(TILT), 1)}
     json.dump(out, open(os.path.join(BUILD, "plan.json"), "w"))
-    render(cell, plantable, comp, P, os.path.join(BUILD, "plan_layout.png"))
-    print("PV tables: %d | total prims: %d | tilt %.0f | DC-coupled BESS distributed to 6 blocks"
+    render((W_x - 40, SOUTH_CAP - 40, E_x + 40, NORTH_CAP + 40), comp, P,
+           os.path.join(BUILD, "plan_layout.png"))
+    print("PV tables: %d | total prims: %d | tilt %.0f | two parcels (N creek-capped + S band)"
           % (n_tab, len(P), math.degrees(TILT)))
     print("wrote build/plan.json and build/plan_layout.png")
 
 
-def render(cell, plantable, comp, prims, png):
-    b = cell.bounds
-    W, H, pad = 1200, 1300, 30
-    s = min((W - 2*pad) / (b[2]-b[0]), (H - 2*pad) / (b[3]-b[1]))
+def render(bounds, comp, prims, png):
+    b = bounds                                          # (x0, y0, x1, y1)
+    W, pad = 1000, 30
+    s = (W - 2*pad) / (b[2]-b[0])
+    H = int((b[3]-b[1]) * s) + 2*pad
 
     def px(x, y):
         return (pad + (x - b[0]) * s, H - (pad + (y - b[1]) * s))
@@ -319,7 +372,6 @@ def render(cell, plantable, comp, prims, png):
             if gg.geom_type == "Polygon":
                 d.line([px(*c) for c in gg.exterior.coords], fill=col, width=w)
 
-    outline(cell, (255, 255, 255, 255), 2)
     outline(comp, (200, 200, 120, 220), 2)
 
     def col(mat):

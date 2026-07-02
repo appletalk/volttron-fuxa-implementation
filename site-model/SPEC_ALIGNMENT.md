@@ -33,11 +33,22 @@ change is required. Optionally document them in a future "site/civil" section:
   setback) so it fills the section SOUTH of the creek. ~150-200 m open buffer to the
   channel. Colour-based auto-detection failed (ESRI is a green-season capture with
   almost no creek/field contrast).
-- **CAPACITY (open decision):** the creek-free section south of the cap is ~202 ha
-  gross -> ~55 ha module at GCR 0.32 -> **~116 MWdc / ~92 MWac**, NOT 150. To model
-  the full 150 MWac accurately the plant must span into the adjacent section south
-  of Township Rd 260 (real 150 MW plants span multiple parcels), OR the nameplate is
-  a liberty. Pending user direction.
+- **CAPACITY (RESOLVED -> two parcels):** one section south of the creek holds only
+  ~92 MWac at GCR 0.32, so the plant now spans TWO parcels for the full ~150 MWac:
+  the creek-capped north section (Township Rd 260 -> y=+600) + a band of the section
+  south of Township Rd 260 (y=-820 -> -1520), sharing one substation on the corridor.
+  ~7810 tables ~= 150 MWac. Real 150 MW plants routinely span multiple parcels.
+- **SATELLITE ALIGNMENT (bug found + fixed):** an apparent "we cut the west creek"
+  turned out to be a STALE-CACHED underlay -- Blender's image `load(check_existing=
+  True)` kept the old single-parcel satellite after a re-fetch (same filename) and
+  stretched it onto the new-extent plane, shifting the creek ~200 m east into the
+  panels. Force-reload fixed it; on the correct imagery the plant clears the north
+  creek (cap), the west creek (it's west of Hwy 9, adjacent section), the corridor,
+  and the south wetland. Verified by overlaying exact OSM road centrelines (they land
+  on the satellite roads). NOTE for future rebuilds: always force-reload the image.
+- **Inverter service roads (added per engineer review):** every inverter/transformer
+  skid now sits on an E-W service road (with N-S collector roads on block boundaries),
+  and each DC-coupled battery cluster has an access spur -- full maintenance access.
 - Equipment counts/dimensions are representative massing, not a stamped GA drawing.
 
 ## Doc updates to consider (none required yet)

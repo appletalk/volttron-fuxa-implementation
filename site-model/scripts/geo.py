@@ -23,8 +23,9 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUILD = os.path.join(HERE, "build")
 OSM_CACHE = os.path.join(BUILD, "osm.json")
 
-# half-footprint we consider for the plant (metres from anchor)
-HALF = 1300.0
+# half-footprint we consider for the plant (metres from anchor). Large enough to
+# reach the section SOUTH of Township Rd 260 (a two-parcel 150 MWac plant).
+HALF = 2500.0
 
 # setback (metres) applied as a buffer around each feature centreline/edge
 ROAD_SETBACK = {

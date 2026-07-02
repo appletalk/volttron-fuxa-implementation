@@ -16,7 +16,11 @@ from PIL import Image
 import geo
 
 Z = 16                     # ~1.5 m/px at this latitude
-HALF = 1350.0              # metres each side of the anchor
+# Cover BOTH parcels: past the creek in the north down through the section south of
+# Township Rd 260 (local metres; X=east, Y=north, anchor at origin).
+X_HALF = 1100.0
+Y_TOP = 800.0
+Y_BOT = -2500.0
 BUILD = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build")
 URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/%d/%d/%d"
 
@@ -34,10 +38,12 @@ def tile2deg(xt, yt, z):
 
 
 def main():
-    dlat = HALF / geo.M_PER_DEG_LAT
-    dlon = HALF / geo.M_PER_DEG_LON
-    x0, y0 = deg2tile(geo.ANCHOR_LAT + dlat, geo.ANCHOR_LON - dlon, Z)   # top-left
-    x1, y1 = deg2tile(geo.ANCHOR_LAT - dlat, geo.ANCHOR_LON + dlon, Z)   # bottom-right
+    lat_top = geo.ANCHOR_LAT + Y_TOP / geo.M_PER_DEG_LAT
+    lat_bot = geo.ANCHOR_LAT + Y_BOT / geo.M_PER_DEG_LAT
+    lon_w = geo.ANCHOR_LON - X_HALF / geo.M_PER_DEG_LON
+    lon_e = geo.ANCHOR_LON + X_HALF / geo.M_PER_DEG_LON
+    x0, y0 = deg2tile(lat_top, lon_w, Z)   # top-left
+    x1, y1 = deg2tile(lat_bot, lon_e, Z)   # bottom-right
     xt0, yt0 = int(math.floor(x0)), int(math.floor(y0))
     xt1, yt1 = int(math.floor(x1)), int(math.floor(y1))
 
