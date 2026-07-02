@@ -12,8 +12,11 @@ modbus-sim/sim.py:  187.5 MWdc, 150 MWac (ILR 1.25), 1-axis N-S backtracking tra
 GCR 0.32, bifacial (~660 Wp, bifaciality 0.70), inverter eta 98.5%, NOCT 45 C,
 gamma_Pmp -0.37%/C, site 51.18978 N / -113.66769 W, ~961 m (Wheatland County, AB).
 
-Weather: build/tmy.csv (PVGIS TMY = NREL NSRDB satellite irradiance for this point,
-converted to a SAM weather file by scripts/fetch_weather.py).
+Weather (adversarial-review note): a direct NREL NSRDB PSM3 pull was NOT reachable, so
+two independent public resources bracket the answer -- PVGIS TMY (build/tmy.csv; runs
+WARM here, DNI 2049 kWh/m2/yr) and Open-Meteo ERA5 (build/tmy_era5.csv; COOL, DNI 1889).
+The headline is the CENTRAL estimate across both, NOT the warm PVGIS case. Both are
+converted to SAM weather files by scripts/fetch_weather.py.
 
 Outputs: build/sam_results.json + build/sam_monthly.png.
 Run:  site-model/.venv-sam/bin/python scripts/sam_model.py
@@ -28,10 +31,13 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUILD = os.path.join(HERE, "build")
 
 # Two weather sources -> a production RANGE (the dominant uncertainty is the resource):
-#   PVGIS-NSRDB TMY  (satellite; DNI ~2049)  = upper bracket / primary
-#   Open-Meteo ERA5  (reanalysis; DNI ~1889) = lower bracket (ERA5 under-reads DNI)
-WEATHER = [("PVGIS-NSRDB", os.path.join(BUILD, "tmy.csv")),
-           ("ERA5-2016",   os.path.join(BUILD, "tmy_era5.csv"))]
+#   PVGIS TMY        (satellite; DNI ~2049) = WARM bracket (PVGIS runs ~10% hot on DNI
+#                                             here vs typical NSRDB for southern AB ~1850)
+#   Open-Meteo ERA5  (reanalysis; DNI ~1889) = COOL bracket
+# NOTE: this is NOT a direct NSRDB PSM3 pull (NREL API unreachable); label PVGIS honestly.
+# Headline = CENTRAL of the two, not the warm PVGIS case (adversarial-review fix).
+WEATHER = [("PVGIS-TMY", os.path.join(BUILD, "tmy.csv")),
+           ("ERA5-2016", os.path.join(BUILD, "tmy_era5.csv"))]
 
 # ---- locked plant parameters ----
 P_DC_KW = 187_500.0          # STC DC array (kW)
@@ -45,14 +51,23 @@ GAMMA_PMP = -0.37            # %/C
 ROTLIM = 60.0                # tracker +/- deg
 HOURS = 8760
 
+# P50 lifetime derate (adversarial-review fix): SAM year-1 energy ignores degradation.
+# 0.5%/yr linear over a 25-yr life -> mid-life average factor 1 - 0.005*(25-1)/2 = 0.94.
+DEGRADATION_PCT_YR = 0.5
+PLANT_LIFE_YR = 25
+LIFE_FACTOR = 1.0 - (DEGRADATION_PCT_YR / 100.0) * (PLANT_LIFE_YR - 1) / 2.0
+
 # Monthly ground albedo: prairie base 0.2, snow cover Dec-Mar (0.6-0.8).
 ALBEDO_MONTHLY = [0.70, 0.70, 0.60, 0.35, 0.20, 0.20,
                   0.20, 0.20, 0.20, 0.25, 0.45, 0.70]
 
-# Monthly soiling LOSS % -- folds winter snow-soiling in (PVGIS has no snow depth,
-# so the physical snow model can't run; captured here instead). Dust rest of year.
-SOILING_MONTHLY = [12.0, 10.0, 6.0, 2.0, 1.5, 1.5,
-                   1.5, 1.5, 1.5, 2.0, 6.0, 12.0]
+# Monthly soiling LOSS % -- folds winter SNOW loss in (PVGIS has no snow depth, so SAM's
+# physical snow model can't run; captured here instead). Adversarial-review fix: the prior
+# 12% Dec/Jan was far too low for southern Alberta -- utility-PV snow losses run 25-40% in
+# the deep-winter months (partly offset by tracker stow-to-shed + chinook melt). Dust the
+# rest of the year. These are production-weighted monthly losses.
+SOILING_MONTHLY = [30.0, 24.0, 11.0, 3.0, 1.5, 1.5,
+                   1.5, 1.5, 1.5, 3.0, 11.0, 30.0]
 
 
 def require_weather():
@@ -80,8 +95,10 @@ def run_pvwatts(wf):
     s.inv_eff = INV_EFF
     s.bifaciality = BIFACIALITY
     s.module_type = 0          # standard module (efficiency handled in Pvsamv1)
-    s.losses = 14.0            # aggregate DC+AC system losses (%)
-    s.en_snowloss = 0          # no snow-depth data; snow folded into soiling
+    s.losses = 18.0            # aggregate DC+AC losses (%): 14 base + ~2.5 winter snow
+                               # + ~1 tracking + LID (adversarial-review fix; PVWatts can't
+                               # take monthly snow, so it's folded into the annual aggregate)
+    s.en_snowloss = 0          # no snow-depth data; snow folded into losses/soiling
 
     m.execute(0)
     o = m.Outputs
@@ -180,8 +197,8 @@ def run_pvsam(wf):
     L.subarray1_dcwiring_loss = 2.0
     L.subarray1_mismatch_loss = 1.0
     L.subarray1_diodeconn_loss = 0.5
-    L.subarray1_nameplate_loss = 1.0
-    L.subarray1_tracking_loss = 0.0
+    L.subarray1_nameplate_loss = 2.5   # 1.0 nameplate + ~1.5 LID (adversarial-review fix)
+    L.subarray1_tracking_loss = 1.0    # tracker pointing inaccuracy (was 0)
     L.acwiring_loss = 1.0
     L.transmission_loss = 1.0       # GSU + take-off line to POI
     L.en_snow_model = 0
@@ -211,7 +228,8 @@ def run_pvsam(wf):
         "inverter_count": inv_count,
         "inverter_paco_kw": paco / 1000.0,
         "annual_ac_kwh": annual_ac,
-        "capacity_factor_ac_pct": ac_cf,
+        "capacity_factor_ac_pct": ac_cf,                       # year-1
+        "capacity_factor_ac_pct_p50_life": ac_cf * LIFE_FACTOR,  # 25-yr avg w/ degradation
         "capacity_factor_dc_pct": dc_cf,
         "specific_yield_kwh_per_kwdc": annual_ac / dc_stc_kw,
         "performance_ratio": out("performance_ratio"),
@@ -269,15 +287,23 @@ def main():
         by_source[src] = {"weather_file": os.path.relpath(wf, HERE),
                           "pvwatts_v8": pvw, "pvsamv1": pvs}
 
-    # headline AC-CF range across models x weather sources
+    # headline AC-CF: CENTRAL of the two independent resources (not the warm PVGIS case).
+    # Range spans all models x weather sources; central = mean of the two Pvsamv1 (year-1).
     cfs = []
     for res in by_source.values():
         cfs += [res["pvwatts_v8"]["capacity_factor_ac_pct"],
                 res["pvsamv1"]["capacity_factor_ac_pct"]]
-    pvs_ref = by_source[WEATHER[0][0]]["pvsamv1"]
+    pvs_cfs = [res["pvsamv1"]["capacity_factor_ac_pct"] for res in by_source.values()]
+    central = sum(pvs_cfs) / len(pvs_cfs)
+    central_p50 = central * LIFE_FACTOR
+    warm = by_source[WEATHER[0][0]]["pvsamv1"]     # PVGIS warm bracket
+    cool = by_source[WEATHER[1][0]]["pvsamv1"]     # ERA5 cool bracket
+    syield_central = sum(r["pvsamv1"]["specific_yield_kwh_per_kwdc"]
+                         for r in by_source.values()) / len(by_source)
 
-    print(f"\n== HEADLINE ==  AC capacity factor {min(cfs):.1f}-{max(cfs):.1f}%  "
-          f"(primary Pvsamv1 / PVGIS-NSRDB: {pvs_ref['capacity_factor_ac_pct']:.1f}%)")
+    print(f"\n== HEADLINE ==  AC capacity factor CENTRAL {central:.1f}% (year-1), "
+          f"{central_p50:.1f}% (25-yr P50)  |  range {min(cfs):.1f}-{max(cfs):.1f}%  "
+          f"[PVGIS warm {warm['capacity_factor_ac_pct']:.1f} / ERA5 cool {cool['capacity_factor_ac_pct']:.1f}]")
 
     results = {
         "site": {"lat": 51.18978, "lon": -113.66769, "elevation_m": 961,
@@ -288,10 +314,15 @@ def main():
                   "bifaciality": BIFACIALITY},
         "by_weather_source": by_source,
         "headline": {
+            "ac_capacity_factor_pct_central_year1": round(central, 2),
+            "ac_capacity_factor_pct_central_p50_life": round(central_p50, 2),
             "ac_capacity_factor_pct_range": [round(min(cfs), 1), round(max(cfs), 1)],
-            "ac_capacity_factor_pct_primary": round(pvs_ref["capacity_factor_ac_pct"], 2),
-            "primary_basis": "Pvsamv1 / PVGIS-NSRDB TMY",
-            "specific_yield_kwh_per_kwdc_primary": round(pvs_ref["specific_yield_kwh_per_kwdc"]),
+            "brackets_pvsam": {"PVGIS_warm": round(warm["capacity_factor_ac_pct"], 2),
+                               "ERA5_cool": round(cool["capacity_factor_ac_pct"], 2)},
+            "specific_yield_kwh_per_kwdc_central": round(syield_central),
+            "basis": ("CENTRAL of two independent resources (PVGIS TMY warm + Open-Meteo "
+                      "ERA5 cool); direct NSRDB PSM3 pull was not reachable. Winter snow, "
+                      "tracking, and LID losses modeled; P50 = year-1 x 0.94 (0.5%/yr, 25 yr)."),
         },
     }
     p = os.path.join(BUILD, "sam_results.json")

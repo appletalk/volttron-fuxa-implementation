@@ -148,6 +148,37 @@ case is modeled (AC-connected). **NOTE:** the running SCADA sim, `docs/POWERPLAN
 and the 3D model are still **DC-coupled** — re-architecting them to AC-coupled is a separate,
 larger task (see the open question in the session that logged this).
 
+## Adversarial review + correction (2026-07-01)
+
+The first SAM run headlined **26.29% AC CF** ("primary" = PVGIS). An adversarial review
+flagged it as **overstated by ~2–3 points** and the fixes were applied + rerun:
+
+**Findings**
+- **Provenance overclaimed.** `fetch_weather.py` used **PVGIS TMY** (`re.jrc.ec.europa.eu`)
+  as a *fallback* — NREL's NSRDB PSM3 API was unreachable — yet it was labeled
+  "PVGIS-NSRDB" and chosen as authoritative. Not a real NSRDB pull.
+- **Resource runs warm.** The PVGIS TMY reads **DNI 2049 / GHI 1428** kWh/m²/yr (DNI/GHI
+  = 1.44, high for 51°N); the ERA5 alternative reads DNI 1889 / GHI 1381. A single-axis
+  tracker is beam-driven, so that ~10% DNI difference is most of the 25.1 vs 23.1% gap.
+- **Winter snow under-modeled.** Snow was folded into just 12% Dec/Jan soiling; southern
+  Alberta utility-PV snow losses run 25–40% those months (Jul:Jan was a too-shallow 4.3×).
+- **Minor optimism:** tracking loss 0, no LID, year-1 only (no degradation/P50).
+
+**Fixes applied to `sam_model.py`**
+- Headline re-anchored to the **CENTRAL** of the two independent resources (warm PVGIS +
+  cool ERA5), not the warm case; honest labels + `basis` caveat in the JSON.
+- Winter soiling → **30/24/11%** Dec-Jan/Feb/Mar-Nov (snow); PVWatts aggregate `losses`
+  14→18 to match; `tracking_loss` 0→1, `nameplate_loss` 1→2.5 (LID).
+- Added **P50 lifetime** derate (0.5%/yr, 25 yr → ×0.94) alongside year-1.
+
+**Corrected headline:** **AC CF ≈ 24.1% (year-1 central) / 22.7% (25-yr P50)**, range
+22.5–25.1%, specific yield ~1690 kWh/kWdc, PR ~0.83. Above the spec's conservative 18–22%
+prior (too low for high-resource southern AB), below the original sunny-corner 26.3%.
+
+**Residual (deferred):** a **direct NSRDB PSM3 TMY** would collapse the warm/cool bracket
+into the authoritative number — NREL API access to be sorted later. Until then the ~2-point
+resource spread is the dominant uncertainty.
+
 ## Pointers
 - Physics constants + sanity numbers: `docs/POWERPLANT_SPEC.md` (§3, and the "numbers
   to sanity-check" bullet).
